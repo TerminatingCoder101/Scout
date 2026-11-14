@@ -1,5 +1,5 @@
 # web/ interface: API + dashboard
-Owner: see OWNERS.txt. It consumes the report JSON defined in agent/INTERFACE.md.
+Owner: see team/OWNERS.txt. It consumes the report JSON defined in agent/INTERFACE.md.
 This is a starting draft, so the owner should change it freely and announce it on the board.
 
 ## HTTP API

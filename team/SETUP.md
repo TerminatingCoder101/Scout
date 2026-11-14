@@ -7,10 +7,10 @@ Two repos:
 ## Once, by the repo owner
 1. Create a **private** repo called `Scout-board` on GitHub. Add all three teammates as collaborators,
    and add them to **Scout** as well (Settings → Collaborators).
-2. `.board_repo` already says `nbishal-sum/Scout-board`. Roles can wait: while `OWNERS.txt` has the
+2. `team/board_repo` already says `nbishal-sum/Scout-board`. Roles can wait: while `team/OWNERS.txt` has the
    `USER_A`..`USER_D` placeholders, every folder is unclaimed and agents coordinate with `CLAIM:` posts.
    Once you've decided roles, put the real usernames in, and the guard starts enforcing ownership.
-3. Run `scripts/setup_board.sh`, then commit and push `.board_issue`.
+3. Run `team/scripts/setup_board.sh`, then commit and push `team/board_issue`.
 
 ## Each teammate, on their own laptop
 ```bash
@@ -18,7 +18,7 @@ brew install gh jq                     # Linux: apt install gh jq
 gh auth login                          # your OWN GitHub account; it needs repo access
 git clone https://github.com/TerminatingCoder101/Scout.git && cd Scout
 export AGENT_USER=<your-github-username>   # put it in ~/.zshrc so every terminal has it
-scripts/doctor.sh                      # should say "All good."
+team/scripts/doctor.sh                      # should say "All good."
 ```
 Then start your agent inside the `Scout` folder and tell it: **"Read AGENTS.md and follow it."**
 - Claude Code reads `CLAUDE.md` automatically and gets the folder-guard hook.
@@ -28,9 +28,9 @@ Then start your agent inside the `Scout` folder and tell it: **"Read AGENTS.md a
 ## Before you build: test one round trip
 ```bash
 # teammate A
-scripts/wait_for_tag.sh
+team/scripts/wait_for_tag.sh
 # teammate B
-scripts/post.sh <A-username> "QUESTION: can you hear me?"
+team/scripts/post.sh <A-username> "QUESTION: can you hear me?"
 ```
 A's terminal should print B's message within about 15 seconds.
 

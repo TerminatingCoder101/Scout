@@ -4,7 +4,7 @@
 !.env.example
 
 # local agent state for the board scripts
-.board_state/
+team/.board_state/
 
 # python / node
 __pycache__/
@@ -26,3 +26,5 @@ dist/
 # captured images (keep small samples by naming them *.sample.jpg)
 pi/captures/
 !*.sample.jpg
+# private planning docs (not for the public repo)
+*.pdf

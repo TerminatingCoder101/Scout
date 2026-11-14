@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Usage: scripts/wait_for_tag.sh [timeout_seconds]     (0 or empty means wait forever)
+# Usage: team/scripts/wait_for_tag.sh [timeout_seconds]     (0 or empty means wait forever)
 # Blocks until a NEW board comment, written by someone else, mentions @$AGENT_USER or starts with "to: all".
 # It prints that comment and exits 0. Exits 2 on timeout. Polls every $POLL_SECONDS (default 15).
 # If several messages arrive, it returns the oldest one. Run it again to get the next.
-# The first ever run starts from "now". Older messages are history, so use scripts/read_board.sh for those.
+# The first ever run starts from "now". Older messages are history, so use team/scripts/read_board.sh for those.
 set -euo pipefail
 source "$(dirname "$0")/_board.sh"
 need_issue; need_user
 
 TIMEOUT="${1:-0}"
 POLL="${POLL_SECONDS:-15}"
-mkdir -p .board_state
-STATE=".board_state/${AGENT_USER}.last_id"
+mkdir -p team/.board_state
+STATE="team/.board_state/${AGENT_USER}.last_id"
 ME_LC="$(printf '%s' "$AGENT_USER" | tr '[:upper:]' '[:lower:]')"
 API="repos/$BOARD_REPO/issues/$BOARD_ISSUE/comments"
 
@@ -48,7 +48,7 @@ while true; do
     echo "(board fetch failed, retrying in ${POLL}s)" >&2
   fi
   if [ "$TIMEOUT" -gt 0 ] && [ $(( $(date +%s) - START )) -ge "$TIMEOUT" ]; then
-    echo "timeout: no new message for @$AGENT_USER. Run scripts/wait_for_tag.sh again."
+    echo "timeout: no new message for @$AGENT_USER. Run team/scripts/wait_for_tag.sh again."
     exit 2
   fi
   sleep "$POLL"

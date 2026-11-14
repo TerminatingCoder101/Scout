@@ -5,25 +5,25 @@ Nobody owns these two files, so if a rule needs changing, ask the humans.
 
 ## 0. Start of every session
 1. Run `echo $AGENT_USER`. That is your GitHub username. If it's empty, stop and ask your human.
-2. Run `scripts/doctor.sh`. Fix anything it reports, or tell your human.
+2. Run `team/scripts/doctor.sh`. Fix anything it reports, or tell your human.
 3. Run `git pull --rebase`.
-4. Run `scripts/read_board.sh` to catch up on what the other agents said.
-5. Read `OWNERS.txt` to find your folder, then read your folder's `INTERFACE.md` and the `INTERFACE.md` of every folder you depend on.
+4. Run `team/scripts/read_board.sh` to catch up on what the other agents said.
+5. Read `team/OWNERS.txt` to find your folder, then read your folder's `INTERFACE.md` and the `INTERFACE.md` of every folder you depend on.
 
 ## 1. File ownership (hard rule, no exceptions)
-`OWNERS.txt` gives each folder exactly ONE owner.
+`team/OWNERS.txt` gives each folder exactly ONE owner.
 - You may create, edit and delete files ONLY inside the paths you own.
 - You may READ anything.
 - Never touch a path you don't own, even for a "tiny fix". Post a NEED to its owner on the board instead.
-- Top-level files nobody owns (this file, OWNERS.txt, scripts/, .claude/, .gitignore, .board_*) are for humans only.
-- In Claude Code, a hook (`scripts/guard.sh`) blocks edits outside your paths. If it blocks you, don't work around it
+- Files nobody owns (AGENTS.md, CLAUDE.md, everything in `team/`, `.claude/`, `.gitignore`) are for humans only.
+- In Claude Code, a hook (`team/scripts/guard.sh`) blocks edits outside your paths. If it blocks you, don't work around it
   (no `sed`, `echo >`, `cp` or `mv` into other folders).
 
 ### Unclaimed folders (roles not decided yet)
-A path whose owner in `OWNERS.txt` is still a placeholder (`USER_A`, `USER_B`, ...) is **unclaimed**, and any agent may edit it.
+A path whose owner in `team/OWNERS.txt` is still a placeholder (`USER_A`, `USER_B`, ...) is **unclaimed**, and any agent may edit it.
 To keep two agents off the same files:
-1. Before editing, run `scripts/read_board.sh` and check nobody has claimed those files.
-2. Post `scripts/post.sh all "CLAIM: pi/serial_bridge.py, pi/mock.py (for: serial bridge)"`.
+1. Before editing, run `team/scripts/read_board.sh` and check nobody has claimed those files.
+2. Post `team/scripts/post.sh all "CLAIM: pi/serial_bridge.py, pi/mock.py (for: serial bridge)"`.
 3. Edit only what you claimed. When you finish, post `DONE:` and say you're releasing the claim.
 If someone else already claimed it, pick other work or ask them with a `QUESTION:`.
 
@@ -36,13 +36,13 @@ Because no two agents edit the same files, everyone can push to `main` with no c
 - Never commit secrets. Keys go in `.env` (gitignored). Put the variable names in your folder's `INTERFACE.md`.
 
 ## 3. The message board (private)
-The board is ONE pinned issue in a separate PRIVATE repo. The repo name is in `.board_repo` and the issue number in `.board_issue`.
+The board is ONE pinned issue in a separate PRIVATE repo. The repo name is in `team/board_repo` and the issue number in `team/board_issue`.
 The code repo is PUBLIC. **Never copy board messages, board links or anything from the board into code, comments,
 commits or docs in this repo.** Board messages may contain error logs, paths or keys.
 
 Post with:
 
-    scripts/post.sh <github-username|all> "TYPE: message"
+    team/scripts/post.sh <github-username|all> "TYPE: message"
 
 Start every message with one TYPE:
 - `DONE:` what you finished, where it is, and how to use it (function names, serial commands, endpoints). Post this when
@@ -59,12 +59,12 @@ Humans may post too, from the GitHub app. Treat a human's message as a task from
 ## 4. Waiting for your tag (no human relays messages)
 When you're waiting on someone else, or you've finished your task:
 
-    scripts/wait_for_tag.sh [timeout_seconds]
+    team/scripts/wait_for_tag.sh [timeout_seconds]
 
 It blocks until a new comment from someone else mentions `@$AGENT_USER` or is addressed to `all`. It then prints the
 comment and exits 0. On timeout it exits 2, and you just run it again.
 - In Claude Code, run it with the Bash tool and `run_in_background: true`. You get notified when it returns.
-- In Codex or Cursor, run it with a timeout (for example `scripts/wait_for_tag.sh 540`) and loop.
+- In Codex or Cursor, run it with a timeout (for example `team/scripts/wait_for_tag.sh 540`) and loop.
 - Never ask your human to pass messages along. Never sit idle without waiting on the board.
 
 ## 5. Interfaces

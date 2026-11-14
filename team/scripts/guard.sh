@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Claude Code PreToolUse hook (wired in .claude/settings.json).
-# Blocks Edit/Write/MultiEdit/NotebookEdit on files in this repo that $AGENT_USER doesn't own per OWNERS.txt.
+# Blocks Edit/Write/MultiEdit/NotebookEdit on files in this repo that $AGENT_USER doesn't own per team/OWNERS.txt.
 # Reads the tool-call JSON on stdin. Exit 2 = block, and stderr goes back to the agent.
 set -uo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
 INPUT="$(cat)"
 FILE="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null)"
 [ -z "$FILE" ] && exit 0
@@ -16,7 +16,7 @@ ABS="${ABS/#\/private\/var\//\/var\/}"; ROOT_CMP="${ROOT/#\/private\/var\//\/var
 case "$ABS" in "$ROOT_CMP"/*|"$ROOT"/*) ;; *) exit 0;; esac
 REL="${ABS#"$ROOT_CMP"/}"; REL="${REL#"$ROOT"/}"
 
-case "$REL" in .board_state/*) exit 0;; esac
+case "$REL" in team/.board_state/*) exit 0;; esac
 
 if [ -z "${AGENT_USER:-}" ]; then
   echo "BLOCKED: AGENT_USER is not set, so ownership can't be checked. Ask your human to export AGENT_USER and restart." >&2
@@ -37,10 +37,10 @@ while read -r P OWNER _; do
     [ "$(printf '%s' "$OWNER_OF" | tr '[:upper:]' '[:lower:]')" = "$ME_LC" ] && exit 0
     break
   fi
-done < "$ROOT/OWNERS.txt"
+done < "$ROOT/team/OWNERS.txt"
 
 if [ -n "$OWNER_OF" ]; then
-  echo "BLOCKED: '$REL' belongs to @$OWNER_OF, not @$AGENT_USER. Ask them: scripts/post.sh $OWNER_OF \"NEED: ...\"" >&2
+  echo "BLOCKED: '$REL' belongs to @$OWNER_OF, not @$AGENT_USER. Ask them: team/scripts/post.sh $OWNER_OF \"NEED: ...\"" >&2
 else
   echo "BLOCKED: '$REL' is a shared top-level file (humans only). Ask your human if it really needs to change." >&2
 fi

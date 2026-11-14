@@ -1,5 +1,5 @@
 # agent/ interface: the audit agent and its report
-Owner: see OWNERS.txt. It consumes `pi/` (see pi/INTERFACE.md), and `web/` consumes its report.
+Owner: see team/OWNERS.txt. It consumes `pi/` (see pi/INTERFACE.md), and `web/` consumes its report.
 This is a starting draft, so the owner should change it freely and announce it on the board.
 
 ## Run

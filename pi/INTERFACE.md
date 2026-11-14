@@ -1,5 +1,5 @@
 # pi/ interface: Python hardware + vision tools
-Owner: see OWNERS.txt. The consumer is `agent/`. The producer underneath is `firmware/` (see firmware/INTERFACE.md).
+Owner: see team/OWNERS.txt. The consumer is `agent/`. The producer underneath is `firmware/` (see firmware/INTERFACE.md).
 This is a starting draft, so the owner should change it freely and announce it on the board.
 
 ## Module

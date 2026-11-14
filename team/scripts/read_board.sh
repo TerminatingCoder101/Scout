@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: scripts/read_board.sh [count]     (default 15)
+# Usage: team/scripts/read_board.sh [count]     (default 15)
 # Prints the last N board comments, oldest first. Read-only. It doesn't change what wait_for_tag.sh has seen.
 set -euo pipefail
 source "$(dirname "$0")/_board.sh"

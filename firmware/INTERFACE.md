@@ -1,5 +1,5 @@
 # firmware/ interface: Arduino ⇄ Pi serial protocol
-Owner: see OWNERS.txt. The consumer is `pi/`. This is a starting draft, so the owner should change it freely and announce it on the board.
+Owner: see team/OWNERS.txt. The consumer is `pi/`. This is a starting draft, so the owner should change it freely and announce it on the board.
 
 ## Link
 - USB serial, **115200 baud**, 8N1.
