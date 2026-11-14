@@ -3,22 +3,24 @@
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap");
 
 .qi {
-  --qi-bg: #f6f2ea; /* warm ivory */
-  --qi-card: #fffdf9;
-  --qi-ink: #16202e; /* deep navy ink */
-  --qi-muted: #6b7180;
-  --qi-line: #e7e0d3;
-  --qi-gold: #a8834a; /* champagne gold */
-  --qi-gold-soft: #f3ebdc;
-  --qi-btn: #16202e;
-  --qi-btn-ink: #fbf7ef;
-  --qi-pass: #2f6a50; /* emerald */
-  --qi-pass-soft: #e8f1eb;
-  --qi-fail: #9a3a32; /* claret */
-  --qi-fail-soft: #f7e9e5;
-  --qi-verify: #a06d1f; /* amber */
-  --qi-verify-soft: #f8eedb;
-  --qi-shadow: 0 1px 2px rgb(22 32 46 / 0.04), 0 8px 28px rgb(22 32 46 / 0.06);
+  color-scheme: light;
+  --qi-bg: #fbf9f6; /* warm white */
+  --qi-card: #ffffff;
+  --qi-ink: #2b2b2b; /* charcoal */
+  --qi-muted: #6b6662;
+  --qi-line: #ece6de;
+  --qi-gold: #b84c0a; /* burnt orange, for text, icons and links (readable on white) */
+  --qi-gold-soft: #fff4e3; /* honey tint, for selected and soft areas */
+  --qi-honey: #eba937; /* honey yellow, for highlights only */
+  --qi-btn: #cc5500; /* burnt orange buttons */
+  --qi-btn-ink: #ffffff;
+  --qi-pass: #1f7a4d;
+  --qi-pass-soft: #e8f5ee;
+  --qi-fail: #b42318;
+  --qi-fail-soft: #fdecea;
+  --qi-verify: #2f5da8; /* blue, so it's never confused with the orange brand */
+  --qi-verify-soft: #eaf0fa;
+  --qi-shadow: 0 1px 2px rgb(43 43 43 / 0.04), 0 8px 28px rgb(43 43 43 / 0.06);
   --qi-serif: "Fraunces", Georgia, "Times New Roman", serif;
   min-height: 100vh;
   background: var(--qi-bg);
@@ -35,26 +37,6 @@
   flex-direction: column;
   -webkit-font-smoothing: antialiased;
 }
-@media (prefers-color-scheme: dark) {
-  .qi {
-    --qi-bg: #0e131c;
-    --qi-card: #151c28;
-    --qi-ink: #ece6da;
-    --qi-muted: #9aa1ae;
-    --qi-line: #263041;
-    --qi-gold: #d2b07a;
-    --qi-gold-soft: #2a2619;
-    --qi-btn: #d2b07a;
-    --qi-btn-ink: #121822;
-    --qi-pass: #8cc9a8;
-    --qi-pass-soft: #14261e;
-    --qi-fail: #e59a8f;
-    --qi-fail-soft: #2c1818;
-    --qi-verify: #e3b56c;
-    --qi-verify-soft: #2b2214;
-    --qi-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 30px rgb(0 0 0 / 0.25);
-  }
-}
 .qi-center {
   align-items: center;
   justify-content: center;
@@ -69,6 +51,7 @@
   justify-content: space-between;
   padding: 18px 32px;
   border-bottom: 1px solid var(--qi-line);
+  border-top: 4px solid var(--qi-honey);
   background: var(--qi-card);
 }
 .qi-brand {
@@ -121,8 +104,8 @@
 .qi-eyebrow::before {
   content: "";
   width: 28px;
-  height: 1px;
-  background: var(--qi-gold);
+  height: 2px;
+  background: var(--qi-honey);
 }
 .qi-hero {
   margin-bottom: 8px;
@@ -227,13 +210,7 @@
 }
 .qi-primary svg,
 .qi-analyze svg {
-  color: var(--qi-gold);
-}
-@media (prefers-color-scheme: dark) {
-  .qi-primary svg,
-  .qi-analyze svg {
-    color: inherit;
-  }
+  color: inherit;
 }
 .qi-secondary {
   background: transparent;
@@ -252,7 +229,7 @@
 .qi-primary:hover:not(:disabled),
 .qi-analyze:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgb(22 32 46 / 0.18);
+  box-shadow: 0 10px 24px rgb(204 85 0 / 0.28);
 }
 .qi-link {
   background: none;
@@ -435,7 +412,7 @@
 .qi-bar i {
   display: block;
   height: 100%;
-  background: var(--qi-gold);
+  background: linear-gradient(90deg, var(--qi-honey), var(--qi-btn));
   border-radius: 99px;
   transition: width 0.6s ease;
 }
@@ -575,7 +552,7 @@
   padding: 14px 16px;
   border-radius: 12px;
   background: var(--qi-bg);
-  border-left: 3px solid var(--qi-gold);
+  border-left: 3px solid var(--qi-honey);
 }
 
 /* Fixes */
