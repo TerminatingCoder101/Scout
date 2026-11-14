@@ -704,7 +704,7 @@ function Brand() {
     <div className="qi-brand">
       <RadarIcon size={24} />
       <span>
-        scout<b>RADAR</b>
+        Scout<b>RADAR</b>
       </span>
     </div>
   );

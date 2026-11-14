@@ -41,6 +41,7 @@ import {
   FlaskConical,
   LockKeyhole,
   Camera,
+  Briefcase,
 } from "lucide-react";
 import { api, post, patch } from "./api";
 import Radar from "./Radar";
@@ -478,6 +479,10 @@ function App() {
                 )}
             </button>
           ))}
+          <button onClick={() => location.assign("/business")}>
+            <Briefcase size={18} />
+            <span>Business</span>
+          </button>
         </nav>
         <div className="sidebar-bottom">
           <div className="connection-card">
