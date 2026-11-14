@@ -1,0 +1,11 @@
+{
+  "id": "building-a-east-door",
+  "name": "Building A · East entrance",
+  "location": "Ground floor, east lobby",
+  "source": "matterport_export",
+  "source_reference": "Replace with your authorized export filename / model and annotation IDs",
+  "width_in": 36.0,
+  "running_slope_deg": 3.5,
+  "cross_slope_deg": 0.4,
+  "captured_at": "2026-11-13"
+}
