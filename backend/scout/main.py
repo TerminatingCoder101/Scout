@@ -404,6 +404,7 @@ async def favicon():
 
 
 @app.get("/")
+@app.get("/business")  # simple one-click page for business users (same app, see frontend/src/main.tsx)
 async def index():
     if (frontend / "index.html").exists():
         return FileResponse(frontend / "index.html")
