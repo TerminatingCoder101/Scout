@@ -36,8 +36,12 @@ while true; do
       AUTHOR_LC="$(printf '%s' "$AUTHOR" | tr '[:upper:]' '[:lower:]')"
       [ "$AUTHOR_LC" = "$ME_LC" ] && [ "${ALLOW_SELF:-0}" != "1" ] && continue
       BODY="$(printf '%s' "$B64" | base64 --decode)"
+      # skip messages this agent sent itself (matters when two agents share one GitHub account)
+      printf '%s' "$BODY" | grep -Eiq "^from:[[:space:]]*@${ME_LC}[[:space:]]*\$" && [ "${ALLOW_SELF:-0}" != "1" ] && continue
+      # ignore the "from:" header when looking for mentions, so the sender's own name doesn't count as a tag
+      MATCH_BODY="$(printf '%s' "$BODY" | grep -Eiv '^from:[[:space:]]*@')"
       # mentions me (word-bounded, so @bob doesn't match @bobby), or is addressed to everyone
-      if printf '%s' "$BODY" | grep -Eiq "@${ME_LC}([^a-z0-9-]|\$)" \
+      if printf '%s' "$MATCH_BODY" | grep -Eiq "@${ME_LC}([^a-z0-9-]|\$)" \
          || printf '%s' "$BODY" | head -n 1 | grep -Eiq '^to:[[:space:]]*all[[:space:]]*$'; then
         echo "--- new board message (comment $ID by @$AUTHOR) ---"
         printf '%s\n' "$BODY"
