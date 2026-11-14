@@ -1,8 +1,9 @@
-# path        github-username   (one owner per path; replace USER_A..USER_D with real usernames)
-# Lines starting with # are ignored. Paths are relative to the repo root.
+# path        github-username   (one owner per path)
+# Replace a USER_* placeholder with a real GitHub username to assign that role; the guard then enforces it.
+# While a path still has a USER_* placeholder it is unclaimed: anyone may edit it (CLAIM on the board first).
 # Anything not listed here (AGENTS.md, CLAUDE.md, team/, .claude/) is humans-only.
-firmware/     USER_A    # Arduino: ultrasonic + servo, gyro, LCD, LED, buzzer, button, serial protocol
-pi/           USER_B    # Raspberry Pi: serial bridge, width/slope math, camera, Gemini vision
-agent/        USER_C    # AI agent: plans checks, re-measures, writes the fix report
-web/          USER_D    # dashboard, MongoDB Atlas audit history, Devpost text, pitch
-README.md     USER_D    # public project README (Devpost)
+hardware/     USER_MECH    # Member 1, Mechanical: metrology math, calibration, scenarios, validation, e2e test
+firmware/     USER_FW      # Member 2, Firmware: Arduino C++ + Python serial bridge (both ends of the protocol)
+agent/        USER_AGENT   # Member 3, AI Agent & Vision: DeepAgent tools, ADA rules, Gemini, work order
+hud/          USER_HUD     # Member 4, HUD/CoStar/Pitch: radar UI, digital twin data, drift panel, Devpost
+README.md     USER_HUD     # public project README (Devpost)

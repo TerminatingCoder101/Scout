@@ -32,7 +32,7 @@ while read -r P OWNER _; do
     *)  [ "$REL" = "$P" ] && OWNER_OF="$OWNER";;
   esac
   if [ -n "$OWNER_OF" ]; then
-    # Owner still a placeholder (USER_A..), so the folder is unclaimed and anyone may edit. Agents coordinate with CLAIM on the board.
+    # Owner still a placeholder (USER_*), so the folder is unclaimed and anyone may edit. Agents coordinate with CLAIM on the board.
     case "$OWNER_OF" in USER_*) exit 0;; esac
     [ "$(printf '%s' "$OWNER_OF" | tr '[:upper:]' '[:lower:]')" = "$ME_LC" ] && exit 0
     break

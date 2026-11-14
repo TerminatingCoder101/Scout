@@ -30,7 +30,7 @@ dist/
 .claude/settings.local.json
 
 # captured images (keep small samples by naming them *.sample.jpg)
-pi/captures/
+runs/
 !*.sample.jpg
 # private planning docs (not for the public repo)
 *.pdf

@@ -20,10 +20,10 @@ Nobody owns these two files, so if a rule needs changing, ask the humans.
   (no `sed`, `echo >`, `cp` or `mv` into other folders).
 
 ### Unclaimed folders (roles not decided yet)
-A path whose owner in `team/OWNERS.txt` is still a placeholder (`USER_A`, `USER_B`, ...) is **unclaimed**, and any agent may edit it.
+A path whose owner in `team/OWNERS.txt` is still a placeholder (`USER_MECH`, `USER_FW`, ...) is **unclaimed**, and any agent may edit it.
 To keep two agents off the same files:
 1. Before editing, run `team/scripts/read_board.sh` and check nobody has claimed those files.
-2. Post `team/scripts/post.sh all "CLAIM: pi/serial_bridge.py, pi/mock.py (for: serial bridge)"`.
+2. Post `team/scripts/post.sh all "CLAIM: firmware/bridge/scout_serial.py (for: serial bridge mock mode)"`.
 3. Edit only what you claimed. When you finish, post `DONE:` and say you're releasing the claim.
 If someone else already claimed it, pick other work or ask them with a `QUESTION:`.
 
@@ -56,8 +56,17 @@ Start every message with one TYPE:
 Keep messages short. Tag the one person you need, not `all`, unless it really affects everyone.
 Humans may post too, from the GitHub app. Treat a human's message as a task from your team.
 
-## 4. Waiting for your tag (no human relays messages)
-When you're waiting on someone else, or you've finished your task:
+## 4. Staying busy: your backlog
+Each folder's `INTERFACE.md` ends with an ordered **Backlog**. When you finish something:
+1. Post `DONE:` to whoever depends on it.
+2. Take the next backlog item in your folder (if your folder is unclaimed, `CLAIM:` it first).
+3. If something you need isn't ready, build against the mock (`SCOUT_MOCK=1`) instead of waiting.
+4. Only when your backlog is empty, or everything left is blocked, run `team/scripts/post.sh all "QUESTION: my backlog is done, what should I take next?"` and wait (section 5).
+Your human may be busy with physical work (wiring, cardboard, interviews). Keep working through the backlog without them.
+Check the board (`team/scripts/read_board.sh`) between backlog items.
+
+## 5. Waiting for your tag (no human relays messages)
+When you're waiting on someone else, or your backlog is done:
 
     team/scripts/wait_for_tag.sh [timeout_seconds]
 
@@ -67,13 +76,14 @@ comment and exits 0. On timeout it exits 2, and you just run it again.
 - In Codex or Cursor, run it with a timeout (for example `team/scripts/wait_for_tag.sh 540`) and loop.
 - Never ask your human to pass messages along. Never sit idle without waiting on the board.
 
-## 5. Interfaces
+## 6. Interfaces
 Each folder has an `INTERFACE.md`, the contract that the other folders code against. Only the folder's owner edits it.
 - Build against the other folders' contracts, using their mock mode until the real thing is ready.
 - To change a contract you own: update `INTERFACE.md`, push, then post `DONE: interface changed: ...` to the people affected.
 - To change someone else's contract: post a `NEED:` to them. Don't edit their file.
 
-## 6. Style
-Scout is judged at HackPrinceton on Sun Nov 15, 9:30 AM. A small thing that works every time beats a big thing that
+## 7. Style
+Scout Radar is due on Devpost Sun Nov 15, 8:30 AM ET (hard feature freeze Sat 2:00 AM), and judged at 9:30 AM. A small thing that works every time beats a big thing that
 works sometimes. Every part needs a mock mode (`SCOUT_MOCK=1`), so the demo survives a dead sensor.
-Cut list (don't build): RFID (use the button), stepper motors, CoStar.
+Laptop + Arduino UNO over USB only: no Raspberry Pi, no Wi-Fi, no RFID (use the button), no extra motors.
+CoStar/Matterport is IN, as a local mock twin record (`hud/data/twins.json`).

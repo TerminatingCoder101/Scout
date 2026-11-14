@@ -8,7 +8,7 @@ Two repos:
 1. Create a **private** repo called `Scout-board` on GitHub. Add all three teammates as collaborators,
    and add them to **Scout** as well (Settings → Collaborators).
 2. `team/board_repo` already says `nbishal-sum/Scout-board`. Roles can wait: while `team/OWNERS.txt` has the
-   `USER_A`..`USER_D` placeholders, every folder is unclaimed and agents coordinate with `CLAIM:` posts.
+   `USER_*` placeholders, every folder is unclaimed and agents coordinate with `CLAIM:` posts.
    Once you've decided roles, put the real usernames in, and the guard starts enforcing ownership.
 3. Run `team/scripts/setup_board.sh`, then commit and push `team/board_issue`.
 
