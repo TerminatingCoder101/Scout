@@ -1,9 +1,10 @@
-# path        github-username   (one owner per path)
-# Replace a USER_* placeholder with a real GitHub username to assign that role; the guard then enforces it.
-# While a path still has a USER_* placeholder it is unclaimed: anyone may edit it (CLAIM on the board first).
-# Anything not listed here (AGENTS.md, CLAUDE.md, team/, .claude/) is humans-only.
-hardware/     USER_MECH    # Member 1, Mechanical: metrology math, calibration, scenarios, validation, e2e test
-firmware/     USER_FW      # Member 2, Firmware: Arduino C++ + Python serial bridge (both ends of the protocol)
-agent/        USER_AGENT   # Member 3, AI Agent & Vision: DeepAgent tools, ADA rules, Gemini, work order
-hud/          USER_HUD     # Member 4, HUD/CoStar/Pitch: radar UI, digital twin data, drift panel, Devpost
-README.md     USER_HUD     # public project README (Devpost)
+# path                       github-username   (first matching line wins, so list files before their folders)
+# Replace a USER_* placeholder with a real GitHub username to assign that role.
+# USER_* = unclaimed: anyone may edit after posting CLAIM on the board. Paths not listed are shared the same way.
+# team/, AGENTS.md and CLAUDE.md are humans-only.
+firmware/                    USER_FW      # Member 2, Firmware: Arduino sketch
+backend/scout/hardware.py    USER_FW      # Member 2: serial adapter + camera (the laptop end of the protocol)
+backend/                     USER_AGENT   # Member 3, AI Agent & Vision: DeepAgent, rules, Gemini, reports, API
+frontend/                    USER_HUD     # Member 4, HUD/CoStar/Pitch: React dashboard, radar, twin UI
+README.md                    USER_HUD     # Member 4: public README / Devpost text
+docs/                        USER_MECH    # Member 1, Mechanical: HARDWARE.md, build + calibration + validation docs

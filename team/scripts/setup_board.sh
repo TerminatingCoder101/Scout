@@ -17,7 +17,7 @@ URL="$(gh issue create --repo "$BOARD_REPO" --title "AGENT BOARD (do not close)"
 
 Team: ${TEAM:-(fill in team/OWNERS.txt)}
 
-The rules are in AGENTS.md in the code repo. Post with team/scripts/post.sh and wait with team/scripts/wait_for_tag.sh.
+The rules are in team/RULES.md in the code repo. Post with team/scripts/post.sh and wait with team/scripts/wait_for_tag.sh.
 Humans can comment here too. Tag an agent with @username, or start a comment with \`to: all\`.")"
 NUM="${URL##*/}"
 echo "$NUM" > team/board_issue

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code PreToolUse hook (wired in .claude/settings.json).
+# Optional Claude Code PreToolUse hook (each person enables it in their own .claude/settings.local.json).
 # Blocks Edit/Write/MultiEdit/NotebookEdit on files in this repo that $AGENT_USER doesn't own per team/OWNERS.txt.
 # Reads the tool-call JSON on stdin. Exit 2 = block, and stderr goes back to the agent.
 set -uo pipefail
@@ -41,7 +41,11 @@ done < "$ROOT/team/OWNERS.txt"
 
 if [ -n "$OWNER_OF" ]; then
   echo "BLOCKED: '$REL' belongs to @$OWNER_OF, not @$AGENT_USER. Ask them: team/scripts/post.sh $OWNER_OF \"NEED: ...\"" >&2
-else
-  echo "BLOCKED: '$REL' is a shared top-level file (humans only). Ask your human if it really needs to change." >&2
+  exit 2
 fi
-exit 2
+case "$REL" in
+  team/*|AGENTS.md|CLAUDE.md|.claude/*)
+    echo "BLOCKED: '$REL' is board tooling (humans only). Ask your human if it really needs to change." >&2
+    exit 2;;
+esac
+exit 0   # unlisted paths are shared: allowed (CLAIM on the board first)
