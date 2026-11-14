@@ -1,0 +1,8 @@
+# path        github-username   (one owner per path; replace USER_A..USER_D with real usernames)
+# Lines starting with # are ignored. Paths are relative to the repo root.
+# Anything not listed here (rules files, scripts/, .claude/) is humans-only.
+firmware/     USER_A    # Arduino: ultrasonic + servo, gyro, LCD, LED, buzzer, button, serial protocol
+pi/           USER_B    # Raspberry Pi: serial bridge, width/slope math, camera, Gemini vision
+agent/        USER_C    # AI agent: plans checks, re-measures, writes the fix report
+web/          USER_D    # dashboard, MongoDB Atlas audit history, Devpost text, pitch
+README.md     USER_D    # public project README (Devpost)

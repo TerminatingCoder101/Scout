@@ -1,0 +1,28 @@
+# secrets
+.env
+*.env
+!.env.example
+
+# local agent state for the board scripts
+.board_state/
+
+# python / node
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+.next/
+dist/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# local Claude Code settings (shared settings live in .claude/settings.json)
+.claude/settings.local.json
+
+# captured images (keep small samples by naming them *.sample.jpg)
+pi/captures/
+!*.sample.jpg
