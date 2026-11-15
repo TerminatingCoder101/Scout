@@ -25,26 +25,42 @@ async def test_real_mongodb_round_trip(monkeypatch):
     try:
         await store.open()
         location = "test-" + uuid.uuid4().hex
+        building = "test-" + uuid.uuid4().hex
         for i in range(2):
             result = await store.create(
                 InspectionCreate(
-                    building_id="integration-test",
+                    building_id=building,
                     location_id=location,
                     timestamp=datetime(2026, 1, i + 1, tzinfo=timezone.utc),
                     measurements=[
                         dict(key="width", value=90 - i * 5, uncertainty=1, unit="cm")
                     ],
-                    review_status="recheck",
+                    findings=[
+                        dict(
+                            key="obstruction",
+                            category="clearance",
+                            status="observed" if i == 0 else "resolved",
+                        )
+                    ],
+                    review_status="recheck" if i == 0 else "reviewed",
                 )
             )
             ids.append(ObjectId(result["id"]))
-        latest = await store.latest("integration-test", location, 2)
+        latest = await store.latest(building, location, 2)
         assert len(latest) == 2
         assert (await store.get(str(ids[0])))["location_id"] == location
         assert (
             inspections.compare(latest[1], latest[0])["measurement_changes"][0]["delta"]
             == -5
         )
+        assert len(await store.browse(building)) == 2
+        assert len(await store.browse(building, location, offset=1)) == 1
+        summary = await store.analytics(building)
+        assert summary["total_inspections"] == 2
+        assert summary["open_findings"] == 0
+        assert summary["verified_fixes"] == 1
+        assert summary["categories"] == [{"category": "clearance", "count": 1}]
+        assert [v["count"] for v in summary["activity"]] == [1, 1]
     finally:
         try:
             if store.collection is not None and ids:

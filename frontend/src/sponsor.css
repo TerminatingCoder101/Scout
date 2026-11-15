@@ -1,0 +1,149 @@
+.sponsor-workspace {
+  display: grid;
+  gap: 20px;
+}
+.sponsor-hero,
+.sponsor-card {
+  padding: 24px;
+}
+.sponsor-hero {
+  background: linear-gradient(110deg, #203524, #131915);
+}
+.sponsor-hero h2 {
+  font-size: 28px;
+  margin: 12px 0;
+}
+.sponsor-hero small,
+.sponsor-plan > small {
+  color: var(--accent);
+  letter-spacing: 0.12em;
+}
+.sponsor-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  min-width: 0;
+}
+.sponsor-columns > * {
+  min-width: 0;
+}
+.sponsor-workspace h3 {
+  font-size: 20px;
+  margin: 0 0 16px;
+}
+.sponsor-workspace h4 {
+  margin: 18px 0 10px;
+}
+.sponsor-workspace p {
+  line-height: 1.65;
+  margin: 10px 0;
+}
+.sponsor-workspace label:not(.checkbox-line) {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.sponsor-workspace label input,
+.sponsor-workspace select {
+  width: 100%;
+}
+.sponsor-workspace summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.sponsor-property-list {
+  max-height: 420px;
+  overflow: auto;
+  margin: 14px 0;
+  display: grid;
+  gap: 6px;
+}
+.sponsor-property-list button {
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: inherit;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+.sponsor-property-list button.selected {
+  border-color: var(--accent);
+  background: #253021;
+}
+.sponsor-property-list span,
+.sponsor-workspace small {
+  color: var(--muted);
+}
+.sponsor-history {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 10px;
+  color: inherit;
+}
+.sponsor-image {
+  width: 100%;
+  max-height: 430px;
+  object-fit: contain;
+  background: #080c09;
+  border-radius: 8px;
+  margin: 14px 0;
+}
+.sponsor-floor {
+  width: 100%;
+  height: 280px;
+  background: #0b120e;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.sponsor-workspace iframe {
+  width: 100%;
+  height: 440px;
+  border: 0;
+  border-radius: 8px;
+}
+.sponsor-review-heading {
+  display: flex;
+  gap: 15px;
+  justify-content: space-between;
+  align-items: start;
+}
+.sponsor-plan-controls {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 20px 0;
+  margin: 24px 0;
+}
+.sponsor-plan {
+  margin-top: 28px;
+}
+.sponsor-plan article {
+  border-left: 3px solid var(--accent);
+  padding: 4px 18px 14px;
+  background: #19221b;
+  margin: 16px 0;
+  border-radius: 4px;
+}
+.sponsor-workspace li {
+  margin: 10px 0;
+  line-height: 1.6;
+}
+@media (max-width: 900px) {
+  .sponsor-columns {
+    grid-template-columns: 1fr;
+  }
+  .sponsor-review-heading {
+    flex-direction: column;
+  }
+  .sponsor-hero,
+  .sponsor-card {
+    padding: 18px;
+  }
+}

@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from scout.config import config
 from scout.main import app
+from scout import inspections
 from scout import db
 
 
@@ -14,6 +15,7 @@ from scout import db
 def client(monkeypatch):
     # Unit/API tests must never connect to a developer's Atlas database.
     monkeypatch.delenv("MONGODB_URI", raising=False)
+    monkeypatch.setattr(inspections, "mongodb_settings", lambda: ("", "scout"))
     with TestClient(app) as c:
         with db.connection() as conn:
             conn.execute("DELETE FROM scans")

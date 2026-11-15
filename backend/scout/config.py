@@ -3,12 +3,19 @@ import os
 import secrets
 from pathlib import Path
 from threading import RLock
+from urllib.parse import quote_plus, urlsplit, urlunsplit
+
+from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = Path(os.environ.get("SCOUT_DATA_DIR", str(ROOT / ".scout"))).resolve()
 DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
 (DATA / "images").mkdir(exist_ok=True, mode=0o700)
 DEFAULTS = dict(
+    matterport_api_key="",
+    matterport_api_token="",
+    matterport_sdk_key="",
+    vexcel_api_key="",
     gemini_api_key="",
     google_vision_api_key="",
     gemini_model="gemini-3.8-flash",
@@ -28,6 +35,16 @@ DEFAULTS = dict(
 )
 
 
+SECRET_FIELDS = (
+    "gemini_api_key",
+    "google_vision_api_key",
+    "matterport_api_key",
+    "matterport_api_token",
+    "matterport_sdk_key",
+    "vexcel_api_key",
+)
+
+
 class Config:
     def __init__(self):
         self.lock = RLock()
@@ -44,6 +61,8 @@ class Config:
         self.values["gemini_model"] = os.getenv(
             "GEMINI_MODEL", self.values["gemini_model"]
         )
+        for field in SECRET_FIELDS:
+            self.values[field] = os.getenv(field.upper(), self.values[field])
         keypath = DATA / "access-key"
         if not keypath.exists():
             fd = os.open(keypath, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -59,7 +78,7 @@ class Config:
 
     def public(self):
         v = self.snapshot()
-        for key in ("gemini_api_key", "google_vision_api_key"):
+        for key in SECRET_FIELDS:
             v[key + "_configured"] = bool(v.pop(key))
         return v
 
@@ -78,7 +97,48 @@ config = Config()
 
 
 def mongodb_settings():
-    """Process-only Atlas configuration; never exposed through Settings or scans."""
-    return os.getenv("MONGODB_URI", "").strip(), os.getenv(
-        "MONGODB_DB", "scout"
-    ).strip()
+    """Read only Atlas fields from the root .env; process env takes precedence."""
+    file_values = dotenv_values(ROOT / ".env", interpolate=False)
+
+    def value(key, default=""):
+        return (
+            os.environ[key] if key in os.environ else (file_values.get(key) or default)
+        )
+
+    uri = value("MONGODB_URI").strip()
+    name = value("MONGODB_DB", "scout").strip()
+    username, password = value("MONGODB_USERNAME"), value("MONGODB_PASSWORD")
+    # A process-provided URI is a complete override unless process credentials
+    # are explicitly supplied as well; don't mix it with stale .env secrets.
+    if "MONGODB_URI" in os.environ and not any(
+        k in os.environ for k in ("MONGODB_USERNAME", "MONGODB_PASSWORD")
+    ):
+        username, password = "", ""
+    if bool(username) != bool(password):
+        raise ValueError("Set both MongoDB username and password.")
+    if username and password:
+        if not uri:
+            raise ValueError("Set the MongoDB cluster URI.")
+        parsed = urlsplit(uri)
+        if parsed.scheme not in ("mongodb", "mongodb+srv") or not parsed.netloc:
+            raise ValueError("Invalid MongoDB URI.")
+        authority = parsed.netloc
+        if "@" in authority:
+            userinfo, _, authority = authority.rpartition("@")
+            if not any(
+                token in userinfo.lower()
+                for token in (
+                    "<username>",
+                    "<password>",
+                    "<db_username>",
+                    "<db_password>",
+                )
+            ):
+                raise ValueError(
+                    "Do not combine embedded URI credentials with separate MongoDB credentials."
+                )
+        authority = f"{quote_plus(username)}:{quote_plus(password)}@{authority}"
+        uri = urlunsplit(
+            (parsed.scheme, authority, parsed.path, parsed.query, parsed.fragment)
+        )
+    return uri, name

@@ -42,6 +42,10 @@ class Point(StrictModel):
 
 
 class SettingsUpdate(StrictModel):
+    matterport_api_key: str | None = Field(default=None, max_length=1000)
+    matterport_api_token: str | None = Field(default=None, max_length=2000)
+    matterport_sdk_key: str | None = Field(default=None, max_length=1000)
+    vexcel_api_key: str | None = Field(default=None, max_length=4000)
     gemini_api_key: str | None = Field(default=None, max_length=300)
     google_vision_api_key: str | None = Field(default=None, max_length=300)
     gemini_model: str | None = Field(
@@ -90,8 +94,11 @@ class InspectionMeasurement(StrictModel):
 
 
 class InspectionFinding(StrictModel):
+    category: str = Field(default="uncategorized", min_length=1, max_length=80)
     key: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
-    status: Literal["observed", "resolved", "inconclusive", "recheck"] = "recheck"
+    status: Literal["observed", "resolved", "passed", "inconclusive", "recheck"] = (
+        "recheck"
+    )
     detail: str = Field(default="", max_length=2000)
 
 
@@ -107,6 +114,8 @@ class InspectionTilt(StrictModel):
 
 
 class InspectionCreate(StrictModel):
+    scan_id: str | None = Field(default=None, max_length=80)
+    source_mode: Literal["demo", "hardware"] | None = None
     building_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$")
     location_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -1,13 +1,19 @@
 """Async Atlas persistence, independent of physical acquisition and local SQLite scans."""
 
+import asyncio
+import hashlib
 import json
 from contextlib import asynccontextmanager
+from urllib.parse import parse_qs, urlsplit
+
+import certifi
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query
 from pymongo import AsyncMongoClient, DESCENDING
 from pymongo.errors import PyMongoError
 
+from . import db
 from .config import mongodb_settings
 from .models import InspectionCreate
 
@@ -22,10 +28,19 @@ class InspectionStore:
         self.collection = None
 
     async def open(self):
-        uri, name = mongodb_settings()
-        if not uri:
-            return
         try:
+            uri, name = mongodb_settings()
+            if not uri:
+                return
+            options = {}
+            query = {
+                key.lower(): value
+                for key, value in parse_qs(urlsplit(uri).query).items()
+            }
+            if uri.startswith("mongodb+srv://") and "tlscafile" not in query:
+                # Atlas uses TLS by default. Python.org macOS installations may
+                # lack a system CA path; use verified roots, never insecure TLS.
+                options["tlsCAFile"] = certifi.where()
             self.client = AsyncMongoClient(
                 uri,
                 tz_aware=True,
@@ -33,6 +48,7 @@ class InspectionStore:
                 connectTimeoutMS=5000,
                 socketTimeoutMS=10000,
                 timeoutMS=15000,
+                **options,
             )
             await self.client.admin.command("ping")
             self.collection = self.client[name]["inspections"]
@@ -72,6 +88,18 @@ class InspectionStore:
     async def create(self, payload):
         doc = payload.model_dump(mode="python")
         async with self.operation() as c:
+            if payload.scan_id:
+                # Stable source ID makes automatic saving and historical imports idempotent.
+                existing = await c.find_one({"scan_id": payload.scan_id})
+                if existing:
+                    return serialize(existing)
+                doc["_id"] = ObjectId(
+                    hashlib.sha256(payload.scan_id.encode()).hexdigest()[:24]
+                )
+                await c.update_one(
+                    {"_id": doc["_id"]}, {"$setOnInsert": doc}, upsert=True
+                )
+                return serialize(doc)
             result = await c.insert_one(doc)
         doc["_id"] = result.inserted_id
         return serialize(doc)
@@ -94,6 +122,174 @@ class InspectionStore:
             )
             docs = await cursor.to_list(length=limit)
         return [serialize(d) for d in docs]
+
+    async def browse(self, building_id=None, location_id=None, limit=50, offset=0):
+        query = {
+            k: v
+            for k, v in dict(building_id=building_id, location_id=location_id).items()
+            if v
+        }
+        async with self.operation() as c:
+            docs = (
+                await c.find(query)
+                .sort([("timestamp", -1), ("_id", -1)])
+                .skip(offset)
+                .limit(limit)
+                .to_list(length=limit)
+            )
+        return [serialize(d) for d in docs]
+
+    async def analytics(self, building_id=None):
+        match = {"building_id": building_id} if building_id else {}
+        pipeline = [
+            {"$match": match},
+            {
+                "$facet": {
+                    "total": [{"$count": "count"}],
+                    "activity": [
+                        {
+                            "$group": {
+                                "_id": {
+                                    "$dateToString": {
+                                        "format": "%Y-%m-%d",
+                                        "date": "$timestamp",
+                                        "timezone": "UTC",
+                                    }
+                                },
+                                "count": {"$sum": 1},
+                            }
+                        },
+                        {"$sort": {"_id": 1}},
+                    ],
+                    "current": [
+                        {
+                            "$sort": {
+                                "building_id": 1,
+                                "location_id": 1,
+                                "timestamp": -1,
+                                "_id": -1,
+                            }
+                        },
+                        {
+                            "$group": {
+                                "_id": {
+                                    "building": "$building_id",
+                                    "location": "$location_id",
+                                },
+                                "records": {"$firstN": {"input": "$$ROOT", "n": 2}},
+                            }
+                        },
+                        {
+                            "$project": {
+                                "latest": {"$arrayElemAt": ["$records", 0]},
+                                "previous": {"$arrayElemAt": ["$records", 1]},
+                            }
+                        },
+                        {"$unwind": "$latest.findings"},
+                        {
+                            "$group": {
+                                "_id": {
+                                    "$ifNull": [
+                                        "$latest.findings.category",
+                                        "uncategorized",
+                                    ]
+                                },
+                                "count": {"$sum": 1},
+                                "open": {
+                                    "$sum": {
+                                        "$cond": [
+                                            {
+                                                "$in": [
+                                                    "$latest.findings.status",
+                                                    [
+                                                        "observed",
+                                                        "inconclusive",
+                                                        "recheck",
+                                                    ],
+                                                ]
+                                            },
+                                            1,
+                                            0,
+                                        ]
+                                    }
+                                },
+                                "verified": {
+                                    "$sum": {
+                                        "$cond": [
+                                            {
+                                                "$and": [
+                                                    {
+                                                        "$eq": [
+                                                            "$latest.review_status",
+                                                            "reviewed",
+                                                        ]
+                                                    },
+                                                    {
+                                                        "$eq": [
+                                                            "$latest.findings.status",
+                                                            "resolved",
+                                                        ]
+                                                    },
+                                                    {
+                                                        "$anyElementTrue": [
+                                                            {
+                                                                "$map": {
+                                                                    "input": {
+                                                                        "$ifNull": [
+                                                                            "$previous.findings",
+                                                                            [],
+                                                                        ]
+                                                                    },
+                                                                    "as": "f",
+                                                                    "in": {
+                                                                        "$and": [
+                                                                            {
+                                                                                "$eq": [
+                                                                                    "$$f.key",
+                                                                                    "$latest.findings.key",
+                                                                                ]
+                                                                            },
+                                                                            {
+                                                                                "$eq": [
+                                                                                    "$$f.status",
+                                                                                    "observed",
+                                                                                ]
+                                                                            },
+                                                                        ]
+                                                                    },
+                                                                }
+                                                            }
+                                                        ]
+                                                    },
+                                                ]
+                                            },
+                                            1,
+                                            0,
+                                        ]
+                                    }
+                                },
+                            }
+                        },
+                        {"$sort": {"_id": 1}},
+                    ],
+                }
+            },
+        ]
+        async with self.operation() as c:
+            cursor = await c.aggregate(pipeline)
+            rows = await cursor.to_list(length=1)
+        data = rows[0]
+        return {
+            "total_inspections": data["total"][0]["count"] if data["total"] else 0,
+            "open_findings": sum(x["open"] for x in data["current"]),
+            "verified_fixes": sum(x["verified"] for x in data["current"]),
+            "categories": [
+                {"category": x["_id"], "count": x["count"]} for x in data["current"]
+            ],
+            "activity": [
+                {"date": x["_id"], "count": x["count"]} for x in data["activity"]
+            ],
+        }
 
 
 def serialize(doc):
@@ -170,6 +366,72 @@ async def create_inspection(payload: InspectionCreate):
     return await store.create(payload)
 
 
+@router.get("")
+async def browse_inspections(
+    building_id: str | None = Query(default=None, min_length=1, max_length=120),
+    location_id: str | None = Query(default=None, min_length=1, max_length=120),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=100000),
+):
+    return await store.browse(building_id, location_id, limit, offset)
+
+
+@router.get("/analytics")
+async def inspection_analytics(
+    building_id: str | None = Query(default=None, min_length=1, max_length=120),
+):
+    return await store.analytics(building_id)
+
+
+sync_lock = asyncio.Lock()
+
+
+@router.post("/sync-local")
+async def sync_local_inspections():
+    """Import every completed local scan, not just the recent UI page."""
+    async with sync_lock:
+        async with store.operation():
+            pass
+
+        def local_history():
+            with db.connection() as c:
+                return [
+                    json.loads(r[0])
+                    for r in c.execute(
+                        "SELECT document FROM scans WHERE status='completed' ORDER BY created_at"
+                    )
+                ]
+
+        scans = await asyncio.to_thread(local_history)
+        saved = skipped = failed = 0
+        for doc in scans:
+            if not doc.get("result"):
+                skipped += 1
+                continue
+            try:
+                async with store.operation() as c:
+                    existing = await c.find_one({"scan_id": doc["id"]})
+                if existing:
+                    saved_id = str(existing["_id"])
+                    skipped += 1
+                else:
+                    saved_id = await save_completed_scan(doc)
+                    saved += 1
+                doc.update(atlas_status="saved", atlas_inspection_id=saved_id)
+                doc.pop("atlas_error", None)
+                await asyncio.to_thread(db.save_scan, doc)
+            except InspectionUnavailable:
+                raise
+            except (ValueError, KeyError, TypeError):
+                failed += 1
+        return {
+            "imported": saved,
+            "already_saved_or_skipped": skipped,
+            "failed": failed,
+            "total_local_completed": len(scans),
+        }
+
+
 @router.get("/latest")
 async def latest_inspections(
     building_id: str = Query(min_length=1, max_length=120),
@@ -215,3 +477,53 @@ def previous_inspections_tool(building_id, location_id):
             return "Inspection history is temporarily unavailable; continue with current evidence and require review."
 
     return get_previous_inspections
+
+
+async def save_completed_scan(doc):
+    """Persist deterministic results; database failure must not discard local evidence."""
+    result = doc.get("result", {})
+    checks = result.get("checks", [])
+    payload = InspectionCreate(
+        scan_id=doc["id"],
+        source_mode=doc["request"]["mode"],
+        building_id=doc["request"]["building_id"],
+        location_id=doc["request"].get("location_id") or doc["request"]["profile"],
+        timestamp=doc["completed_at"],
+        raw_sensor_measurements=doc.get("points", []),
+        raw_tilt={
+            k: v
+            for k, v in doc.get("tilt", {}).items()
+            if k in ("pitch_deg", "roll_deg", "still")
+        },
+        measurements=[
+            dict(key=c["key"], value=c["value"], uncertainty=c["error"], unit=c["unit"])
+            for c in checks
+        ],
+        findings=[
+            dict(
+                key=c["key"],
+                category=c["key"],
+                status="observed"
+                if c["status"] == "FAIL"
+                else "passed"
+                if c["status"] == "PASS" and not result.get("issues")
+                else "inconclusive",
+                detail=c["label"] + ": " + c["status"],
+            )
+            for c in checks
+        ],
+        photo_references=[
+            "/api/images/" + image["id"] for image in doc.get("images", [])
+        ],
+        agent_actions=[
+            dict(
+                name="inspection",
+                detail="Completed "
+                + doc.get("agent_provider", "deterministic")
+                + " inspection; deterministic rules evaluated measurements.",
+            )
+        ],
+        review_status="recheck" if result.get("verdict") == "VERIFY" else "pending",
+    )
+    saved = await store.create(payload)
+    return saved["id"]

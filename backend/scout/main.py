@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from . import db, rules, vision, inspections
+from . import db, rules, vision, inspections, sponsor
 from .config import config, DATA, ROOT
 from .hardware import ports, DeviceError
 from .models import (
@@ -29,6 +29,7 @@ from .reports import work_order_pdf
 @asynccontextmanager
 async def lifespan(app):
     db.init()
+    sponsor.init()
     try:
         await inspections.store.open()
         yield
@@ -36,7 +37,10 @@ async def lifespan(app):
         try:
             await manager.close()
         finally:
-            await inspections.store.close()
+            try:
+                await sponsor.close()
+            finally:
+                await inspections.store.close()
 
 
 app = FastAPI(
@@ -122,6 +126,7 @@ async def health():
 
 
 protected = [Depends(authorized)]
+app.include_router(sponsor.router, dependencies=protected)
 app.include_router(inspections.router, dependencies=protected)
 
 

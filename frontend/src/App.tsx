@@ -45,6 +45,8 @@ import {
 } from "lucide-react";
 import { api, post, patch } from "./api";
 import Radar from "./Radar";
+import InspectionHistory from "./InspectionHistory";
+import Sponsor from "./Sponsor";
 import type {
   Scan,
   Twin,
@@ -56,11 +58,20 @@ import type {
 } from "./types";
 
 type Page =
-  "overview" | "twins" | "history" | "orders" | "validation" | "settings";
+  | "sponsor"
+  | "analytics"
+  | "overview"
+  | "twins"
+  | "history"
+  | "orders"
+  | "validation"
+  | "settings";
 const pages: { id: Page; label: string; icon: typeof RadarIcon }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "sponsor", label: "Property intelligence", icon: MapPin },
   { id: "twins", label: "Digital twins", icon: Layers3 },
-  { id: "history", label: "Inspections", icon: History },
+  { id: "history", label: "Inspection History", icon: History },
+  { id: "analytics", label: "Analytics", icon: Activity },
   { id: "orders", label: "Work orders", icon: ClipboardList },
   { id: "validation", label: "Calibration lab", icon: FlaskConical },
 ];
@@ -168,6 +179,7 @@ function App() {
     [scans, setScans] = useState<Scan[]>([]),
     [scan, setScan] = useState<Scan | null>(null),
     [events, setEvents] = useState<Event[]>([]);
+  const [inspectionLocation, setInspectionLocation] = useState("entrance-door");
   const [building, setBuilding] = useState("princeton-demo"),
     [mode, setMode] = useState("demo"),
     [scenario, setScenario] = useState("obstructed"),
@@ -349,6 +361,7 @@ function App() {
     await action(async () => {
       const body = {
         building_id: building,
+        location_id: inspectionLocation,
         mode,
         scenario,
         profile,
@@ -562,9 +575,11 @@ function App() {
               <h1>
                 {
                   {
+                    sponsor: "Inside, outside, and connected.",
                     overview: "See what the blueprint missed.",
                     twins: "Your baseline, in one place.",
-                    history: "Every scan. Every detail.",
+                    history: "Inspection History",
+                    analytics: "Property-wide trends.",
                     orders: "From finding to follow-through.",
                     validation: "Measure the measurement.",
                     settings: "Make Scout yours.",
@@ -574,10 +589,14 @@ function App() {
               <p>
                 {
                   {
+                    sponsor:
+                      "Connect CoStar properties, Matterport interiors, and aerial evidence.",
                     overview:
                       "Scan the space. Understand the drift. Know what to fix.",
                     twins:
                       "Compare what was documented with what is actually there.",
+                    analytics:
+                      "Recorded findings, reviewed fixes, and inspection activity.",
                     history:
                       "A durable record of measurements, evidence, and decisions.",
                     orders:
@@ -1002,6 +1021,16 @@ function App() {
                   )}
                 </section>
               </div>
+              {scan?.atlas_status && (
+                <p role="status" className="info-note">
+                  {scan.atlas_status === "saved"
+                    ? "Saved to Atlas · " +
+                      (scan.request.location_id || scan.request.profile)
+                    : scan.atlas_status === "failed"
+                      ? scan.atlas_error
+                      : "Saving inspection to Atlas…"}
+                </p>
+              )}
               {result && (
                 <section className="panel checks-panel">
                   <div className="panel-heading">
@@ -1091,85 +1120,18 @@ function App() {
               onError={setError}
             />
           )}
-          {page === "history" && (
-            <section className="panel">
-              {scans.length ? (
-                <>
-                  <div className="panel-heading">
-                    <h2>
-                      Inspection history{" "}
-                      <span className="count">{scans.length}</span>
-                    </h2>
-                    <button
-                      className="secondary compact"
-                      onClick={() =>
-                        action(async () => setScans(await api("/scans")))
-                      }
-                    >
-                      <RefreshCw size={14} />
-                      Refresh
-                    </button>
-                  </div>
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>LOCATION</th>
-                          <th>INPUT</th>
-                          <th>WHEN</th>
-                          <th>WIDTH</th>
-                          <th>RESULT</th>
-                          <th />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {scans.map((s) => (
-                          <tr key={s.id}>
-                            <td>
-                              <strong>{s.twin.name}</strong>
-                              <small>
-                                {s.request.profile} · {s.id.slice(0, 8)}
-                              </small>
-                            </td>
-                            <td>
-                              <span className="subtle-tag">
-                                {s.request.mode === "demo"
-                                  ? "Simulation"
-                                  : "Hardware"}
-                              </span>
-                            </td>
-                            <td>{date(s.created_at)}</td>
-                            <td className="mono">
-                              {num(s.result?.width_in)} in
-                            </td>
-                            <td>
-                              <Badge value={s.result?.verdict || s.status} />
-                            </td>
-                            <td>
-                              <button
-                                className="text-button"
-                                onClick={() => {
-                                  selectScan(s);
-                                  navigate("overview");
-                                }}
-                              >
-                                View <ArrowUpRight size={14} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : (
-                <Empty icon={History} title="Your record starts with a scan.">
-                  Run an inspection and find its measurements, evidence, and
-                  timeline here.
-                </Empty>
-              )}
-            </section>
+          {page === "sponsor" && (
+            <Sponsor settings={settings!} onChange={setSettings} />
           )}
+          {page === "history" && (
+            <InspectionHistory
+              onViewScan={(s) => {
+                selectScan(s);
+                navigate("overview");
+              }}
+            />
+          )}
+          {page === "analytics" && <InspectionHistory analytics />}
           {page === "orders" && (
             <Orders
               scans={scans}
@@ -1266,6 +1228,18 @@ function App() {
                     </option>
                   ))}
                 </select>
+              </Field>
+              <Field
+                label="Location ID"
+                hint="Reuse this ID when inspecting the same doorway or ramp again. Completed inspections save to Atlas automatically."
+              >
+                <input
+                  required
+                  pattern="[a-zA-Z0-9_-]+"
+                  maxLength={120}
+                  value={inspectionLocation}
+                  onChange={(e) => setInspectionLocation(e.target.value)}
+                />
               </Field>
               <div className="segmented">
                 <button

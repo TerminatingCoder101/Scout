@@ -112,6 +112,7 @@ export default function QuickInspect({
     error: null,
   });
   const [twins, setTwins] = useState<Twin[]>([]);
+  const [inspectionLocation, setInspectionLocation] = useState("entrance-door");
   const [property, setProperty] = useState("");
   const [space, setSpace] = useState<Space>("doorway");
   const [demo, setDemo] = useState(false);
@@ -227,6 +228,7 @@ export default function QuickInspect({
         mode: demo || !device.connected ? "demo" : "hardware",
         scenario: "obstructed",
         profile: space,
+        location_id: inspectionLocation,
         use_ai: !!settings?.gemini_api_key_configured,
       };
       if (property) body.building_id = property;
@@ -410,6 +412,20 @@ export default function QuickInspect({
             </Step>
 
             <Step n={2} title="What are you checking?">
+              <label>
+                Location ID
+                <input
+                  required
+                  pattern="[a-zA-Z0-9_-]+"
+                  maxLength={120}
+                  value={inspectionLocation}
+                  onChange={(e) => setInspectionLocation(e.target.value)}
+                />
+              </label>
+              <p>
+                Completed live and demo inspections save to Atlas automatically.
+                Reuse the location ID for repeat inspections.
+              </p>
               <div
                 className="qi-spaces"
                 role="radiogroup"
@@ -581,6 +597,11 @@ function Report({
           })}
         </div>
         <small>
+          {scan.atlas_status === "saved"
+            ? "Saved to Atlas · "
+            : scan.atlas_status === "failed"
+              ? scan.atlas_error + " · "
+              : ""}
           {scan.twin.name}
           {scan.request.mode === "demo" ? " · demo data" : ""}
         </small>

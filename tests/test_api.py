@@ -159,3 +159,37 @@ def test_restart_marks_running_interrupted(client):
     db.save_scan(doc)
     db.init()
     assert db.get_scan("stale")["status"] == "interrupted"
+
+
+def test_completed_scan_automatically_saved_to_atlas(client, monkeypatch):
+    from scout import inspections
+    from unittest.mock import AsyncMock
+    from bson import ObjectId
+
+    saved_id = str(ObjectId())
+    create = AsyncMock(return_value={"id": saved_id})
+    monkeypatch.setattr(inspections.store, "create", create)
+    res = client.post(
+        "/api/scans", json={"scenario": "obstructed", "location_id": "east-door"}
+    )
+    scan = complete(client, res.json()["id"])
+    assert scan["atlas_status"] == "saved"
+    assert scan["atlas_inspection_id"] == saved_id
+    payload = create.call_args.args[0]
+    assert payload.location_id == "east-door" and payload.source_mode == "demo"
+    assert payload.scan_id == scan["id"]
+    assert len(payload.raw_sensor_measurements) == 37
+    assert payload.measurements[0].uncertainty == scan["result"]["checks"][0]["error"]
+    assert payload.photo_references == [image["url"] for image in scan["images"]]
+    assert all(f.status != "resolved" for f in payload.findings)
+    assert payload.review_status != "reviewed"
+    create.assert_awaited_once()
+
+
+def test_atlas_failure_keeps_completed_local_inspection(client):
+    res = client.post("/api/scans", json={"scenario": "clear"})
+    scan = complete(client, res.json()["id"])
+    assert scan["status"] == "completed"
+    assert scan["atlas_status"] == "failed"
+    assert "saved locally" in scan["atlas_error"]
+    assert len(scan["points"]) == 37

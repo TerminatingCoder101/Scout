@@ -79,16 +79,26 @@ Cost ranges are labeled illustrative planning allowances, not contractor quotes.
 
 ### MongoDB Atlas inspection history
 
+Atlas SRV connections use the installed `certifi` CA bundle by default to support Python installations without a working system certificate path. TLS certificate/hostname validation remains enabled. An explicit `tlsCAFile` in the URI is preserved.
+
 Scout optionally stores longitudinal inspection records in Atlas using PyMongo's `AsyncMongoClient`. The existing FastAPI lifespan creates one shared client, pings it and creates the `location_history` compound index on `(building_id, location_id, timestamp DESC, _id DESC)`. Shutdown awaits client closure. All Atlas operations use async I/O. There is no Vector Search dependency.
 
-Create an Atlas cluster, a database user with `readWrite` permission on your chosen database, and a Network Access entry for the backend machine. Obtain the Python driver connection string from Atlas. Percent-encode special characters in its username/password. Export it as `MONGODB_URI` and export `MONGODB_DB` (defaults to `scout`) in the same terminal that starts Scout. Enter the URI privately in your terminal; never paste real credentials into source or chat. `.env.example` documents the names but is not automatically loaded by this app. See [MongoDB's driver connection instructions](https://www.mongodb.com/docs/languages/python/pymongo-driver/current/connect/).
+Create an Atlas cluster, a database user with `readWrite` permission on your chosen database, and a Network Access entry for the backend machine. Obtain the Python driver connection string from Atlas. Scout reads the Atlas fields from the project-root `.env`, which is ignored by Git. Enter the URI, username and password privately in that file; never paste credentials into chat. See [MongoDB's driver connection instructions](https://www.mongodb.com/docs/languages/python/pymongo-driver/current/connect/).
+
+Edit `.env` in VS Code and set these values:
+
+```dotenv
+MONGODB_URI=mongodb+srv://your-cluster.mongodb.net/?retryWrites=true&w=majority
+MONGODB_USERNAME=your-database-user
+MONGODB_PASSWORD='your-database-password'
+MONGODB_DB=scout
+```
+
+Replace `your-cluster.mongodb.net` with your actual Atlas hostname. You can instead paste Atlas's URI containing `<db_username>` / `<db_password>` placeholders; Scout replaces those using the two separate fields. For separate fields enter the original password, not a URL-encoded password: Scout encodes it. Quote a password containing spaces or `#`; to include a literal apostrophe use double quotes and escape backslashes/double quotes as needed. The project process environment takes precedence over `.env`. An explicitly exported `MONGODB_URI` is treated as a complete override unless MongoDB username/password are also exported. Alternatively use a complete, percent-encoded URI and leave the separate username/password empty. Do not combine real embedded URI credentials with separate credentials.
 
 ```bash
 .venv/bin/pip install -r requirements.txt
-# macOS/zsh: prompt privately instead of placing the URI in command history
-read -s 'MONGODB_URI?Atlas connection URI: '
-export MONGODB_URI
-export MONGODB_DB=scout
+# Fill in the ignored project-root .env before starting Scout.
 .venv/bin/python scripts/run.py
 # API-only alternative:
 PYTHONPATH=backend .venv/bin/uvicorn scout.main:app --host 127.0.0.1 --port 8000
@@ -137,6 +147,8 @@ Atlas records are created explicitly through `POST /api/inspections`; existing `
 
 The live test skips unless both test variables are supplied. When enabled it creates synthetic records under a unique location and deletes only its inserted IDs on exit; it also creates the history index. It never implicitly uses the production `MONGODB_URI`.
 
+For MongoDB for VS Code, connect the extension to your Atlas cluster separately using **MongoDB: Connect with Connection String**, then open `scout-inspections.mongodb.js` and click the playground's Run button. The playground is read-only and filters by the building and location IDs at the top of the file. Change `use('scout')` if your `MONGODB_DB` differs. An empty result means no matching Atlas inspection records have been created yet. The extension's saved connection is separate from Scout: configure the backend with its own root `.env` or environment variables before startup.
+
 - React + TypeScript + Vite frontend, responsive CSS, SVG polar radar, reconnectable SSE stream.
 - FastAPI backend, SQLite WAL persistence, local image storage, ReportLab PDFs.
 - A single serial reader owns device I/O; concurrent inspections are rejected. STOP cancels scans, and unfinished scans become interrupted after restart.
@@ -168,3 +180,95 @@ npm --prefix frontend run dev
 In development, Vite proxies `/api` to the backend. Unlock the development tab with the local access key. The production launcher serves both frontend and API on port 8000.
 
 See **[docs/TESTING.md](docs/TESTING.md)** for tested behavior and verification limits. Physical sensor accuracy, live Google inference, and authorized provider data still require your actual hardware, credentials, and exports. No facilities interview, field-validation dataset, sponsor claim, or competition submission was fabricated.
+
+### Atlas inspection history and analytics
+
+In the existing dashboard at `/`, select **Inspection History** in the sidebar
+for MongoDB records, building/location filters, and **Compare latest two**. Select
+**Analytics** for property-wide trends (filter by building ID, or leave blank for
+all buildings). The combined **Inspection History** tab includes local scans and Atlas records as expandable rows, with linked records shown once.
+These tabs poll FastAPI every five seconds and provide a manual Refresh button.
+New completed live and demo scans are automatically saved into Atlas. Opening Analytics imports previous completed local scans into Atlas without duplicating linked scan IDs.
+
+API requests use the dashboard's existing authentication:
+
+- `GET /api/inspections?building_id=...&location_id=...&limit=50&offset=0`
+  lists saved history, newest first; filters are optional.
+- `GET /api/inspections/compare?building_id=...&location_id=...` compares the
+  latest two records; HTTP 409 explains insufficient history.
+- `GET /api/inspections/analytics?building_id=...` aggregates total inspection
+  activity and current findings. Requires MongoDB 5.2+ (`$firstN`); Atlas supports it.
+- `POST /api/inspections` saves a validated inspection; existing single-record
+  `GET /api/inspections/{id}` and `/latest` endpoints remain available.
+
+Findings optionally accept `category` (default `uncategorized`); older records
+remain supported. Open findings count observed, inconclusive and recheck findings
+in each location's latest inspection. Verified fixes count only explicit resolved
+findings in reviewed latest inspections whose matching finding was observed in
+the immediately preceding record. Disappearance does not prove resolution.
+Category charts count findings from each location's latest record, including
+resolved findings. Activity counts all records by UTC date. Measurement differences
+show the sum of both uncertainty bounds; overlapping bounds remain inconclusive.
+These are screening and review metrics, not certified ADA compliance.
+
+To exercise the UI, authenticate via the launcher, then use `/api/docs` to POST
+`docs/inspection.example.json` twice with the same building and location IDs and
+different timestamps. Change a measurement and preserve its uncertainty. For a
+verified fix, set a finding to `observed` in the first record, then `resolved`
+with `review_status: "reviewed"` in the second. Use a category such as `clearance`.
+Filter Inspection History to those IDs and click Compare latest two; inspect
+Analytics using the same building filter. New saves appear within five seconds.
+Use unique test IDs so these synthetic records do not mix with real inspections.
+
+Run the backend and frontend checks from the repository root:
+
+```sh
+.venv/bin/python scripts/run.py --no-browser
+# In another terminal:
+.venv/bin/pytest -q
+cd frontend
+npm test
+npm run build
+```
+
+The optional live integration test uses only explicitly supplied
+`MONGODB_TEST_URI` and `MONGODB_TEST_DB`. Point them at a test database, then run
+`.venv/bin/pytest tests/test_inspections_live.py -q`. It creates two uniquely
+scoped synthetic records, checks history, comparison and aggregation results,
+and deletes its inserted records in cleanup. Keep credentials in environment
+variables, never in committed files or shell commands shared with others.
+
+
+### Automatic Atlas saving from Scout
+
+Start an inspection in the dashboard with **New inspection** (or use `/business`).
+Choose the building/twin, enter a stable **Location ID**, and select live hardware
+or demo mode. Completed inspections save automatically to Atlas before completion
+is reported to the frontend. Use the same building and location IDs on subsequent
+runs for comparisons. Demo records are labeled `demo`; use a separate demo
+building/location when testing so simulated measurements do not mix with field data.
+API or hardware-button callers without a location use the profile (`doorway`,
+`ramp`, or `corridor`) as their location ID.
+
+The completed scan shows **Saved to Atlas** or a database save failure message.
+If Atlas is unavailable, local evidence and scan completion are retained; failed
+saves remain local until Analytics imports previous completed scans. Cancelled and failed scans are
+not published as completed Atlas inspections. Atlas records include the scan ID,
+source mode, raw measurements and tilt, uncertainty, deterministic check results,
+and photo references. Photos remain on the Scout server. Passing measured checks
+are stored as `passed`, never automatically marked as human-reviewed verified fixes.
+
+### Property intelligence
+
+The dashboard at `/` includes **Property intelligence** alongside Inspection
+History and Analytics. Use **Connect sponsor accounts** to manage Matterport
+API key/token, browser SDK key, and Vexcel credentials. Search imported CoStar
+properties, select a linked Matterport space, and load interior/aerial evidence.
+If no properties are present, use **Import local CoStar kit** with the extracted
+`costar-hackathon-kit` folder (or set `COSTAR_KIT_DIR`). Existing saved sponsor
+credentials and imported properties are reused. See
+[the integration guide](docs/COSTAR_INTEGRATION.md) for provider setup and scope.
+
+Inspection History combines local and Atlas inspection rows. Expand a row to see its radar plot, measured values and uncertainty, findings, and available photos. The activity graph counts loaded records for the current filters/page; Analytics retains property-wide aggregation. Use Open full inspection for the original workspace and timeline.
+
+Analytics now imports all previous completed local scans through authenticated `POST /api/inspections/sync-local` before loading its aggregates. This reads the full SQLite history, bypassing the recent-scans 100-record UI limit. Repeated imports are duplicate-safe by scan ID. Invalid legacy records are reported as skipped/failed; failed and cancelled scans are not counted as completed inspections. The import preserves original timestamps and demo/hardware provenance.

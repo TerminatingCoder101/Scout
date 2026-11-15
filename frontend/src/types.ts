@@ -78,6 +78,9 @@ export interface WorkOrder {
   }[];
 }
 export interface Scan {
+  atlas_status?: "saving" | "saved" | "failed";
+  atlas_error?: string;
+  atlas_inspection_id?: string;
   id: string;
   created_at: string;
   completed_at?: string;
@@ -87,6 +90,7 @@ export interface Scan {
     scenario: string;
     profile: string;
     building_id: string;
+    location_id?: string;
     use_ai: boolean;
   };
   twin: Twin;
@@ -108,6 +112,10 @@ export interface Event {
   data: Record<string, unknown>;
 }
 export interface Settings {
+  matterport_api_key_configured?: boolean;
+  matterport_api_token_configured?: boolean;
+  matterport_sdk_key_configured?: boolean;
+  vexcel_api_key_configured?: boolean;
   gemini_api_key_configured: boolean;
   google_vision_api_key_configured: boolean;
   gemini_model: string;

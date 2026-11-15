@@ -238,3 +238,60 @@ async def test_async_store_yields_and_tool_is_location_bound(monkeypatch):
     assert "No location_id" in await inspections.previous_inspections_tool(
         "building-1", None
     ).ainvoke({})
+
+
+def test_history_and_analytics_endpoints(client, monkeypatch):
+    browse = AsyncMock(return_value=[])
+    analytics = AsyncMock(return_value={"total_inspections": 0})
+    monkeypatch.setattr(inspections.store, "browse", browse)
+    monkeypatch.setattr(inspections.store, "analytics", analytics)
+    assert (
+        client.get("/api/inspections?building_id=b&location_id=l&offset=50").json()
+        == []
+    )
+    browse.assert_awaited_once_with("b", "l", 50, 50)
+    assert client.get("/api/inspections/analytics?building_id=b").json() == {
+        "total_inspections": 0
+    }
+    analytics.assert_awaited_once_with("b")
+    assert client.get("/api/inspections?limit=101").status_code == 422
+    assert client.get("/api/inspections?offset=-1").status_code == 422
+    client.headers.pop("Authorization")
+    assert client.get("/api/inspections").status_code == 401
+    assert client.get("/api/inspections/analytics").status_code == 401
+
+
+def test_history_analytics_disabled_database(client):
+    assert client.get("/api/inspections").status_code == 503
+    assert client.get("/api/inspections/analytics").status_code == 503
+
+
+def test_sync_imports_all_local_history_and_skips_existing(client, monkeypatch):
+    from scout import db
+
+    c = SimpleNamespace(find_one=AsyncMock(return_value=None))
+    monkeypatch.setattr(inspections.store, "collection", c)
+    save = AsyncMock(return_value=str(ObjectId()))
+    monkeypatch.setattr(inspections, "save_completed_scan", save)
+    for i in range(105):
+        db.save_scan(
+            dict(
+                id=f"old-{i}",
+                created_at="2026-01-01T00:00:00Z",
+                status="completed",
+                result={"checks": []},
+            )
+        )
+    db.save_scan(
+        dict(id="cancelled", created_at="2026-01-01T00:00:00Z", status="cancelled")
+    )
+    result = client.post("/api/inspections/sync-local")
+    assert result.status_code == 200
+    assert result.json()["imported"] == 105  # bypasses the recent-scans LIMIT 100
+    assert save.await_count == 105
+    save.reset_mock()
+    c.find_one.return_value = {"_id": ObjectId()}
+    result = client.post("/api/inspections/sync-local").json()
+    assert result["imported"] == 0
+    assert result["already_saved_or_skipped"] == 105
+    save.assert_not_awaited()

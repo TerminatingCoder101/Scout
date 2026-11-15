@@ -2375,3 +2375,24 @@ code {
     scroll-behavior: auto !important;
   }
 }
+
+.atlas-history { display: grid; gap: 20px; }
+.history-filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; }
+.history-filters label { display: grid; gap: 8px; }
+.history-bars { list-style: none; padding: 0; max-height: 400px; overflow: auto; }
+.history-bars li { display: grid; grid-template-columns: minmax(100px, 1fr) 2fr 50px; gap: 12px; align-items: center; margin: 12px 0; }
+.history-bars meter { width: 100%; accent-color: var(--accent, #b6ee78); }
+
+.atlas-history summary.panel-heading { cursor: pointer; list-style: none; }
+.atlas-history summary.panel-heading::-webkit-details-marker { display: none; }
+.atlas-history summary.panel-heading::before { content: '▸'; margin-right: 12px; }
+.atlas-history details[open] > summary.panel-heading::before { content: '▾'; }
+.atlas-history summary:focus-visible { outline: 2px solid var(--accent, #b6ee78); outline-offset: -2px; }
+.history-photos { display: flex; flex-wrap: wrap; gap: 12px; }
+.history-photos img { width: min(100%, 320px); height: auto; object-fit: contain; }
+
+.activity-chart-scroll { width: 100%; overflow-x: auto; }
+.inspection-activity-chart { display: block; width: 100%; height: 300px; }
+
+.analytics-bar-track { height: 24px; background: #26352b; border-radius: 4px; overflow: hidden; }
+.analytics-bar-fill { height: 100%; background: #b6ee78; min-width: 0; border-radius: 4px; }

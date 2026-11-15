@@ -1,7 +1,7 @@
 import asyncio
 import math
 import uuid
-from . import db, rules, vision
+from . import db, rules, vision, inspections
 from .config import config, DATA
 from .hardware import SerialDevice, Simulator, capture_camera, DeviceError
 from .models import ScanRequest
@@ -358,6 +358,19 @@ class ScanManager:
             )
         finally:
             doc["completed_at"] = db.now()
+            if doc["status"] == "completed":
+                doc["atlas_status"] = "saving"
+                try:
+                    doc["atlas_inspection_id"] = await inspections.save_completed_scan(
+                        doc
+                    )
+                    doc["atlas_status"] = "saved"
+                except Exception:
+                    # Retain local evidence even when Atlas is unavailable. Never expose driver errors.
+                    doc["atlas_status"] = "failed"
+                    doc["atlas_error"] = (
+                        "Atlas save failed. Your inspection remains saved locally. Check MongoDB configuration."
+                    )
             db.save_scan(doc)
             await ctx.emit(
                 "complete", {"status": doc["status"], "error": doc.get("error")}
