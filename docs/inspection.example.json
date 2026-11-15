@@ -1,0 +1,16 @@
+{
+  "building_id": "local-demo",
+  "location_id": "east-door",
+  "timestamp": "2026-11-14T12:00:00Z",
+  "raw_sensor_measurements": [
+    {"angle_deg": 0, "distance_cm": 43.5, "spread_cm": 0.6, "valid_pings": 15}
+  ],
+  "raw_tilt": {"pitch_deg": 0.4, "roll_deg": -0.2, "still": true},
+  "measurements": [
+    {"key": "clear_width", "value": 87.0, "unit": "cm", "uncertainty": 1.2}
+  ],
+  "findings": [{"key": "opening", "status": "recheck", "detail": "Synthetic example; verify calibration and full sweep."}],
+  "photo_references": ["/api/images/example.jpg"],
+  "agent_actions": [{"name": "inspect_opening", "detail": "Synthetic example action, not a live acquisition."}],
+  "review_status": "recheck"
+}

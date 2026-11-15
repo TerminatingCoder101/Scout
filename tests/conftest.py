@@ -11,7 +11,9 @@ from scout import db
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    # Unit/API tests must never connect to a developer's Atlas database.
+    monkeypatch.delenv("MONGODB_URI", raising=False)
     with TestClient(app) as c:
         with db.connection() as conn:
             conn.execute("DELETE FROM scans")

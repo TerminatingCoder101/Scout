@@ -1,4 +1,6 @@
 from typing import Literal
+from datetime import datetime, timezone
+from pydantic import model_validator
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -20,6 +22,9 @@ class Twin(StrictModel):
 
 class ScanRequest(StrictModel):
     building_id: str = "princeton-demo"
+    location_id: str | None = Field(
+        default=None, min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$"
+    )
     mode: Literal["demo", "hardware"] = "demo"
     scenario: Literal["obstructed", "clear", "borderline", "noisy"] = "obstructed"
     profile: Literal["doorway", "ramp", "corridor"] = "doorway"
@@ -75,3 +80,62 @@ class WorkOrderUpdate(StrictModel):
     status: Literal["open", "in_progress", "resolved"]
     assignee: str = Field(default="", max_length=100)
     notes: str = Field(default="", max_length=2000)
+
+
+class InspectionMeasurement(StrictModel):
+    key: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    value: float | None = Field(default=None, ge=-1e12, le=1e12)
+    unit: str = Field(min_length=1, max_length=30)
+    uncertainty: float = Field(ge=0, le=1e12)
+
+
+class InspectionFinding(StrictModel):
+    key: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    status: Literal["observed", "resolved", "inconclusive", "recheck"] = "recheck"
+    detail: str = Field(default="", max_length=2000)
+
+
+class InspectionAction(StrictModel):
+    name: str = Field(min_length=1, max_length=120)
+    detail: str = Field(default="", max_length=2000)
+
+
+class InspectionTilt(StrictModel):
+    pitch_deg: float | None = Field(default=None, ge=-90, le=90)
+    roll_deg: float | None = Field(default=None, ge=-90, le=90)
+    still: bool = False
+
+
+class InspectionCreate(StrictModel):
+    building_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$")
+    location_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    raw_sensor_measurements: list[Point] = Field(default_factory=list, max_length=1000)
+    raw_tilt: InspectionTilt | None = None
+    measurements: list[InspectionMeasurement] = Field(
+        default_factory=list, max_length=100
+    )
+    findings: list[InspectionFinding] = Field(default_factory=list, max_length=100)
+    photo_references: list[str] = Field(default_factory=list, max_length=20)
+    agent_actions: list[InspectionAction] = Field(default_factory=list, max_length=100)
+    review_status: Literal["pending", "reviewed", "inconclusive", "recheck"] = "recheck"
+
+    @model_validator(mode="after")
+    def validate_record(self):
+        if self.timestamp.utcoffset() is None:
+            raise ValueError("timestamp must include a timezone")
+        self.timestamp = self.timestamp.astimezone(timezone.utc)
+        # BSON dates have millisecond precision; create/get must agree exactly.
+        self.timestamp = self.timestamp.replace(
+            microsecond=(self.timestamp.microsecond // 1000) * 1000
+        )
+        for items in (self.measurements, self.findings):
+            if len({item.key for item in items}) != len(items):
+                raise ValueError(
+                    "Measurement and finding keys must be unique within each list"
+                )
+        if any(not p or len(p) > 500 for p in self.photo_references):
+            raise ValueError(
+                "Photo references must be nonempty and at most 500 characters"
+            )
+        return self

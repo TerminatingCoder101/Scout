@@ -75,3 +75,10 @@ class Config:
 
 
 config = Config()
+
+
+def mongodb_settings():
+    """Process-only Atlas configuration; never exposed through Settings or scans."""
+    return os.getenv("MONGODB_URI", "").strip(), os.getenv(
+        "MONGODB_DB", "scout"
+    ).strip()

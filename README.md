@@ -77,6 +77,66 @@ Cost ranges are labeled illustrative planning allowances, not contractor quotes.
 
 ## Architecture and API
 
+### MongoDB Atlas inspection history
+
+Scout optionally stores longitudinal inspection records in Atlas using PyMongo's `AsyncMongoClient`. The existing FastAPI lifespan creates one shared client, pings it and creates the `location_history` compound index on `(building_id, location_id, timestamp DESC, _id DESC)`. Shutdown awaits client closure. All Atlas operations use async I/O. There is no Vector Search dependency.
+
+Create an Atlas cluster, a database user with `readWrite` permission on your chosen database, and a Network Access entry for the backend machine. Obtain the Python driver connection string from Atlas. Percent-encode special characters in its username/password. Export it as `MONGODB_URI` and export `MONGODB_DB` (defaults to `scout`) in the same terminal that starts Scout. Enter the URI privately in your terminal; never paste real credentials into source or chat. `.env.example` documents the names but is not automatically loaded by this app. See [MongoDB's driver connection instructions](https://www.mongodb.com/docs/languages/python/pymongo-driver/current/connect/).
+
+```bash
+.venv/bin/pip install -r requirements.txt
+# macOS/zsh: prompt privately instead of placing the URI in command history
+read -s 'MONGODB_URI?Atlas connection URI: '
+export MONGODB_URI
+export MONGODB_DB=scout
+.venv/bin/python scripts/run.py
+# API-only alternative:
+PYTHONPATH=backend .venv/bin/uvicorn scout.main:app --host 127.0.0.1 --port 8000
+```
+
+With no URI, existing SQLite scans and hardware continue to work; Atlas endpoints return a safe 503. A configured but unreachable/misconfigured Atlas database fails startup with a sanitized message rather than accepting writes that cannot be persisted. Fix the configuration and restart. Runtime database failures return a generic 503 without connection details. URI/database configuration stays outside public Settings and scan snapshots.
+
+The new routes use Scout's existing cookie/Bearer authentication:
+
+- `POST /api/inspections`: create an inspection from [docs/inspection.example.json](docs/inspection.example.json).
+- `GET /api/inspections/{id}`: retrieve the string ObjectId returned on creation.
+- `GET /api/inspections/latest?building_id=local-demo&location_id=east-door&limit=10`: recent records scoped to both identifiers; limit 1–100.
+- `GET /api/inspections/compare?building_id=local-demo&location_id=east-door`: compare the latest two records by observation timestamp, breaking ties with ObjectId; returns 409 when fewer than two exist.
+
+Use **http://127.0.0.1:8000/api/docs**, authorize with your local access key, and execute the example POST. Change the example timestamp and measured value, create a second record, then call compare for that same building/location. All records in this example are synthetic. You can also use a logged-in browser's console:
+
+```javascript
+const record = {
+  building_id: "local-demo", location_id: "east-door",
+  measurements: [{key: "clear_width", value: 87, unit: "cm", uncertainty: 1.2}],
+  findings: [{key: "opening", status: "recheck", detail: "Synthetic demonstration"}],
+  review_status: "recheck"
+};
+await fetch("/api/inspections", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(record)});
+record.measurements[0].value = 80;
+await fetch("/api/inspections", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(record)});
+console.log(await (await fetch("/api/inspections/compare?building_id=local-demo&location_id=east-door")).json());
+```
+
+Records retain raw acoustic points and optional signed IMU readings, processed measurements with absolute uncertainty, findings, photo references, agent actions and review status. Timestamps must include a timezone and are stored in UTC. Arrays are bounded, keys must be unique and numeric measurements finite. Photos are references only; Atlas does not upload or fetch them automatically.
+
+Comparison reports `delta = after − before` and a conservative combined uncertainty `before uncertainty + after uncertainty`. It reports a detectable change only when the absolute delta exceeds that sum. Overlapping/touching intervals, missing readings or incompatible units are `inconclusive`; no automatic unit conversion occurs. Missing findings are `absent_in_latest`, never silently resolved. Review status supports `inconclusive` and `recheck`. Change detection is not a regulatory compliance decision; existing deterministic rules remain authoritative and Scout provides no certified ADA compliance.
+
+The existing DeepAgent includes the LangChain-compatible `get_previous_inspections` tool. Supply `location_id` alongside `building_id` when calling `POST /api/scans` to bind the tool to the current location. The tool cannot query another location via model arguments. Without location metadata or Atlas access it returns an actionable message and lets the existing workflow continue. Historical text is untrusted evidence and cannot define thresholds.
+
+Atlas records are created explicitly through `POST /api/inspections`; existing `/api/scans` records continue to persist in SQLite. This integration does not automatically upload old or newly captured scans or change acquisition. A caller can submit a completed scan's points, tilt, evaluated measurements, uncertainty and references with its verified building/location identifiers.
+
+```bash
+# Offline tests use async collection doubles and do not touch Atlas
+.venv/bin/pytest -q
+.venv/bin/pytest -q tests/test_inspections.py
+# Optional real-driver round trip; choose a dedicated test database
+# Set MONGODB_TEST_URI privately, and set MONGODB_TEST_DB=scout_test
+.venv/bin/pytest -q tests/test_inspections_live.py
+```
+
+The live test skips unless both test variables are supplied. When enabled it creates synthetic records under a unique location and deletes only its inserted IDs on exit; it also creates the history index. It never implicitly uses the production `MONGODB_URI`.
+
 - React + TypeScript + Vite frontend, responsive CSS, SVG polar radar, reconnectable SSE stream.
 - FastAPI backend, SQLite WAL persistence, local image storage, ReportLab PDFs.
 - A single serial reader owns device I/O; concurrent inspections are rejected. STOP cancels scans, and unfinished scans become interrupted after restart.

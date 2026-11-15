@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from . import db, rules, vision
+from . import db, rules, vision, inspections
 from .config import config, DATA, ROOT
 from .hardware import ports, DeviceError
 from .models import (
@@ -29,8 +29,14 @@ from .reports import work_order_pdf
 @asynccontextmanager
 async def lifespan(app):
     db.init()
-    yield
-    await manager.close()
+    try:
+        await inspections.store.open()
+        yield
+    finally:
+        try:
+            await manager.close()
+        finally:
+            await inspections.store.close()
 
 
 app = FastAPI(
@@ -116,6 +122,16 @@ async def health():
 
 
 protected = [Depends(authorized)]
+app.include_router(inspections.router, dependencies=protected)
+
+
+@app.exception_handler(inspections.InspectionUnavailable)
+async def inspection_database_error(request, exc):
+    return Response(
+        content='{"detail":"Inspection database unavailable. Check configuration or retry shortly."}',
+        status_code=503,
+        media_type="application/json",
+    )
 
 
 @app.get("/api/status", dependencies=protected)
@@ -404,7 +420,9 @@ async def favicon():
 
 
 @app.get("/")
-@app.get("/business")  # simple one-click page for business users (same app, see frontend/src/main.tsx)
+@app.get(
+    "/business"
+)  # simple one-click page for business users (same app, see frontend/src/main.tsx)
 async def index():
     if (frontend / "index.html").exists():
         return FileResponse(frontend / "index.html")
