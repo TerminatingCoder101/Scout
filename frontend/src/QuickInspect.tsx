@@ -88,6 +88,7 @@ export default function QuickInspect({
   });
   const [twins, setTwins] = useState<Twin[]>([]);
   const [recent, setRecent] = useState<ScanSummary[]>([]);
+  const [inspectionLocation, setInspectionLocation] = useState("entrance-door");
   const [property, setProperty] = useState("");
   const [space, setSpace] = useState<Space>("doorway");
   const [demo, setDemo] = useState(false);
@@ -414,7 +415,7 @@ export default function QuickInspect({
               )}
             </Field>
 
-            <Step n={2} title="What are you checking?">
+            <Field n="02" label="What are you checking?">
               <label>
                 Location ID
                 <input
@@ -709,6 +710,19 @@ function Report({
             {scan.twin.name}
             {scan.twin.location ? ` · ${scan.twin.location}` : ""}
           </p>
+          {scan.atlas_status && (
+            <p role="status" className="qi-quiet">
+              {scan.atlas_status === "saved"
+                ? "Saved to Atlas · " +
+                  (scan.request.location_id || scan.request.profile)
+                : scan.atlas_status === "failed"
+                  ? scan.atlas_error
+                  : "Saving to Atlas…"}
+            </p>
+          )}
+          {scan.request.mode === "demo" && (
+            <p className="qi-quiet">Simulation · local fixture demonstration</p>
+          )}
           <div className="qi-tally">
             <span>
               <b>{measured.length}</b> measured
