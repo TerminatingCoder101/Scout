@@ -74,14 +74,15 @@ export default function Radar({
         .filter((p) => p.distance_cm !== null)
         .map((p, i) => {
           const pos = xy(p.angle_deg, p.distance_cm!);
-          const warn = p.spread_cm > 3;
+          const warn = p.spread_cm > 3 || p.valid_pings < 8;
           return (
             <g key={i}>
+              <title>{`${p.angle_deg}° · ${p.distance_cm} cm · ${warn ? "uncertain return" : "consistent return"}; not an object label`}</title>
               <circle
                 cx={pos.x}
                 cy={pos.y}
                 r="8"
-                fill={warn ? "#f2b470" : "#b7ec8c"}
+                fill={warn ? "#ef827c" : "#b7ec8c"}
                 opacity=".35"
                 filter={`url(#${uid}glow)`}
               />
@@ -89,7 +90,7 @@ export default function Radar({
                 cx={pos.x}
                 cy={pos.y}
                 r={warn ? 4.5 : 3}
-                fill={warn ? "#f2b470" : "#b7ec8c"}
+                fill={warn ? "#ef827c" : "#b7ec8c"}
               />
             </g>
           );

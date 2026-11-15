@@ -160,3 +160,29 @@ use that index for inspections. No Google/AI request is made by the camera test.
 Testing is blocked while an inspection is active. The last successful preview can
 be restored after reopening Settings. Camera startup tolerates transient empty
 frames and releases the device after capture, including failed attempts.
+
+## Radar dots and visual route assessment
+
+Green/red dots indicate echo quality, not object identity or route blockage.
+Red means spread exceeds 3 cm or fewer than 8 valid pings; missing distances are
+not plotted. Hover a dot for angle, distance, spread and valid-ping count.
+A doorframe, side railing and obstacle can each produce consistent or noisy echoes.
+
+Visual assessment is separate: obstruction, expected_structure, uncertain or none.
+The Gemini request includes profile, capture angle and measured flags. Side railings
+and doorframes are expected boundaries unless visible evidence shows intrusion into
+the travel route. Obstruction requires an in-path relation plus a description of
+intrusion. Unseen/unclear routes remain uncertain. Image interpretation is still an
+AI assessment requiring site review; no camera-pixel/range-return registration is
+implemented and the guard cannot prove the model's description is correct.
+
+A ramp flagged only for slope requests its first photo at the forward 90-degree
+position. Confirm the camera is mechanically aligned with forward travel; a side
+view alone cannot establish route blockage. Slope flags never become physical
+obstruction claims, and measured verdicts are not changed by the visual assessment.
+Fresh work orders keep measured flags separate and do not recommend removing
+expected railings. Existing historical diagnoses are retained and shown as legacy
+assessments requiring review rather than silently rewritten.
+
+
+The radar uses green dots for consistent returns and red dots for uncertain returns. Colors show echo quality, not whether an object blocks the route.

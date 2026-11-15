@@ -2399,3 +2399,4 @@ code {
 
 .brand .scout-logo { display: block; width: 220px; max-width: 100%; height: auto; flex-shrink: 1; }
 .unlock .brand .scout-logo { width: 300px; }
+.radar-summary { color:#c7d4bf; }

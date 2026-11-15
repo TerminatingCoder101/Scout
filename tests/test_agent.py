@@ -136,3 +136,38 @@ async def test_parallel_sweep_calls_reuse_one_acquisition():
     assert len([e for e in db.events(doc["id"]) if e["kind"] == "point"]) == 37
     await asyncio.gather(ctx.publish(), ctx.publish())
     assert len([e for e in db.events(doc["id"]) if e["kind"] == "work_order"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_ramp_slope_review_faces_route_and_does_not_publish_railing_removal():
+    db.init()
+    request = ScanRequest(profile="ramp")
+    doc = dict(
+        id="33333333-3333-3333-3333-333333333333",
+        created_at=db.now(),
+        status="running",
+        request=request.model_dump(),
+        twin=db.get_twin("princeton-demo"),
+        settings_snapshot=config.public(),
+        points=[],
+        images=[],
+        agent_provider="deterministic",
+    )
+    db.save_scan(doc)
+    ctx = Inspection(doc, Simulator("clear", delay=0))
+    await ctx.sweep()
+    # Isolate a slope-only flag, independently of simulator settings.
+    for c in doc["result"]["checks"]:
+        c["status"] = "FAIL" if c["key"] == "running_slope" else "PASS"
+    doc["result"]["verdict"] = "FAIL"
+    await ctx.capture(0)
+    assert doc["images"][0]["angle_deg"] == 90
+    doc["diagnosis"] = dict(
+        obstruction_status="expected_structure",
+        obstruction="Expected railing outside the route",
+        recommendations=["Verify clearance without modifying railings"],
+    )
+    await ctx.publish("Remove railing!")
+    assert "Remove railing!" not in doc["work_order"]["summary"]
+    assert "Measured flags (separate)" in doc["work_order"]["summary"]
+    assert doc["result"]["verdict"] == "FAIL"

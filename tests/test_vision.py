@@ -52,6 +52,10 @@ async def test_gemini_multimodal_contract_and_cloud_failure(monkeypatch, tmp_pat
 
     received = []
     diagnosis = dict(
+        obstruction_status="obstruction",
+        path_relation="in_path",
+        object_type="box",
+        intrusion_evidence="Box visibly occupies the walking route.",
         obstruction="Box",
         classification="temporary",
         confidence=0.85,
@@ -124,3 +128,38 @@ async def test_cloud_error_not_silently_successful(monkeypatch):
     )
     with pytest.raises(RuntimeError):
         await vision.cloud_objects(b"image", "key")
+
+
+@pytest.mark.parametrize(
+    "status,relation,evidence,expected",
+    [
+        ("expected_structure", "outside_path", "", "expected_structure"),
+        ("obstruction", "outside_path", "Visible railing", "uncertain"),
+        ("obstruction", "in_path", "", "uncertain"),
+        ("none", "not_visible", "", "uncertain"),
+        ("expected_structure", "unknown", "", "uncertain"),
+        ("obstruction", "in_path", "Box covers the walking route", "obstruction"),
+    ],
+)
+def test_visual_route_evidence_guard(status, relation, evidence, expected):
+    d = vision.Diagnosis(
+        obstruction_status=status,
+        path_relation=relation,
+        object_type="railing",
+        intrusion_evidence=evidence,
+        obstruction="A railing was called a structural obstruction",
+        classification="structural",
+        confidence=0.9,
+        observations=[],
+        recommendations=["Remove railing"],
+        limitations="Single view",
+    )
+    result = vision.normalize_diagnosis(d)
+    assert result.obstruction_status == expected
+    assert "Remove railing" not in result.recommendations
+    if expected == "expected_structure":
+        assert result.classification == "none"
+        assert "no obstruction established" in result.obstruction
+    if expected == "uncertain":
+        assert result.classification == "uncertain"
+        assert "not established" in result.obstruction

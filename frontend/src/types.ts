@@ -63,6 +63,13 @@ export interface Result {
   rule_version: string;
 }
 export interface Diagnosis {
+  inspection_profile?: string;
+  capture_trigger_checks?: string[];
+  obstruction_status?:
+    "obstruction" | "expected_structure" | "uncertain" | "none";
+  path_relation?: string;
+  intrusion_evidence?: string;
+  object_type?: string;
   obstruction: string;
   classification: string;
   confidence: number;

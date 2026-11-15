@@ -68,6 +68,18 @@ class Inspection:
             raise DeviceError("Angle outside allowed range.")
         if self.captures >= 3:
             raise DeviceError("Capture limit reached for this scan.")
+        flagged = [
+            c["key"]
+            for c in self.doc["result"]["checks"]
+            if c["status"] in ("FAIL", "VERIFY")
+        ]
+        if (
+            self.request.profile == "ramp"
+            and self.captures == 0
+            and flagged
+            and all(k in ("running_slope", "cross_slope") for k in flagged)
+        ):
+            angle = 90  # Slope-only review needs the route, not a side railing.
         self.captures += 1
         await self.emit(
             "stage",
@@ -114,8 +126,33 @@ class Inspection:
             },
         )
         result = await vision.analyze(
-            DATA / "images" / image_id, self.doc["result"], self.settings
+            DATA / "images" / image_id,
+            self.doc["result"]
+            | {
+                "inspection_context": {
+                    "profile": self.request.profile,
+                    "capture_angle_deg": next(
+                        i["angle_deg"]
+                        for i in self.doc["images"]
+                        if i["id"] == image_id
+                    ),
+                    "trigger_checks": [
+                        c["key"]
+                        for c in self.doc["result"]["checks"]
+                        if c["status"] in ("FAIL", "VERIFY")
+                    ],
+                    "capture_reason": "Review measured flags or uncertain returns; this is not confirmation of an obstruction.",
+                    "pixel_to_range_registration": "not established",
+                }
+            },
+            self.settings,
         )
+        result["inspection_profile"] = self.request.profile
+        result["capture_trigger_checks"] = [
+            c["key"]
+            for c in self.doc["result"]["checks"]
+            if c["status"] in ("FAIL", "VERIFY")
+        ]
         if self.request.mode == "demo":
             result["limitations"] = (
                 "Input image is a simulated illustration, not real evidence. "
@@ -169,10 +206,30 @@ class Inspection:
             )
         diagnosis = self.doc.get("diagnosis")
         if diagnosis:
+            if diagnosis.get("obstruction_status") in (
+                "expected_structure",
+                "none",
+                "uncertain",
+            ):
+                flagged = (
+                    ", ".join(
+                        c["label"]
+                        for c in r["checks"]
+                        if c["status"] in ("FAIL", "VERIFY")
+                    )
+                    or "no flagged measured dimension"
+                )
+                summary = (
+                    "Visual route review: "
+                    + diagnosis["obstruction"]
+                    + " Measured flags (separate): "
+                    + flagged
+                    + ". Review measurement quality and unmeasured scope on site."
+                )
             for rec in diagnosis.get("recommendations", [])[:4]:
                 actions.append(
                     dict(
-                        title="Visual inspection recommendation",
+                        title="Visual route review recommendation",
                         detail=rec,
                         priority="review",
                         estimate_low=None,

@@ -853,11 +853,14 @@ function Report({
                 />
               )}
               <div>
-                <small className="qi-kicker">Found in the opening</small>
+                <small className="qi-kicker">Visual route assessment</small>
                 <p className="qi-finding-title">{scan.diagnosis.obstruction}</p>
                 {scan.diagnosis.classification && (
                   <span className="qi-quiet">
-                    {scan.diagnosis.classification.replaceAll("_", " ")}
+                    {(
+                      scan.diagnosis.obstruction_status ||
+                      "legacy assessment — review required"
+                    ).replaceAll("_", " ")}
                   </span>
                 )}
               </div>

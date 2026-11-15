@@ -792,23 +792,21 @@ function App() {
                     <div className="legend">
                       <span>
                         <i className="point-dot" />
-                        Valid return
+                        Consistent return
                       </span>
                       <span>
-                        <i className="point-dot amber" />
-                        Acoustic noise
+                        <i
+                          className="point-dot"
+                          style={{ background: "#ef827c" }}
+                        />
+                        Uncertain return
                       </span>
                     </div>
-                    <span className="mono">
-                      {scan?.points.length || 0} / 37 POINTS <b>·</b> 0–180°
+                    <span>
+                      {scan?.points.filter((p) => p.distance_cm != null)
+                        .length || 0}{" "}
+                      usable / 37 angles
                     </span>
-                  </div>
-                  <div className="scan-progress">
-                    <div
-                      style={{
-                        width: `${((scan?.points.length || 0) / 37) * 100}%`,
-                      }}
-                    />
                   </div>
                 </section>
                 <section className="panel activity-panel">
@@ -1034,11 +1032,25 @@ function App() {
                         </h3>
                         <p>
                           {scan.diagnosis?.limitations ||
-                            "Enable Gemini to classify this image, or review it manually."}
+                            "Visual review checks route intrusion separately from measured flags."}
                         </p>
+                        {scan.diagnosis?.capture_trigger_checks && (
+                          <p>
+                            Photo requested for:{" "}
+                            {scan.diagnosis.capture_trigger_checks.length
+                              ? scan.diagnosis.capture_trigger_checks
+                                  .map(label)
+                                  .join(", ")
+                              : "sensor-quality or visual review"}
+                            . This is separate from detecting a physical
+                            obstruction.
+                          </p>
+                        )}
                         {scan.diagnosis && (
                           <span className="subtle-tag">
-                            {label(scan.diagnosis.classification)}
+                            {scan.diagnosis.obstruction_status
+                              ? label(scan.diagnosis.obstruction_status)
+                              : "Legacy assessment — review required"}
                           </span>
                         )}
                       </div>
