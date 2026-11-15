@@ -24,7 +24,11 @@ async def run_deep_agent(context):
                 "message": "Read baseline dimensions and provenance.",
             },
         )
-        return json.dumps(context.twin)
+        return (
+            json.dumps(context.twin)
+            if context.request.use_baseline
+            else "No reference baseline selected. Perform measured screening and historical comparison only; do not infer baseline drift."
+        )
 
     @tool
     async def get_sponsor_inspection_task() -> str:
@@ -75,7 +79,12 @@ async def run_deep_agent(context):
         model=model,
         tools=[
             previous_inspections_tool(
-                context.request.building_id, context.request.location_id
+                (context.doc.get("history_scope") or {}).get(
+                    "building_id", context.request.building_id
+                ),
+                (context.doc.get("history_scope") or {}).get(
+                    "location_id", context.request.location_id
+                ),
             ),
             get_digital_twin_specs,
             get_sponsor_inspection_task,

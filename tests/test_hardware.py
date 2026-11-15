@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 from scout.hardware import SerialDevice, DeviceError
 
@@ -52,3 +51,38 @@ async def test_timeout_and_device_error():
     await device.queue.put({"type": "error", "message": "Disconnected"})
     with pytest.raises(DeviceError, match="Disconnected"):
         await device.next()
+
+
+@pytest.mark.asyncio
+async def test_fresh_imu_capture_without_servo_motion():
+    device = SerialDevice()
+    sent = []
+
+    async def send(command):
+        sent.append(command)
+        await device.queue.put(
+            dict(type="tilt", pitch_deg=1.25, roll_deg=-0.5, still=True)
+        )
+
+    device.send = send
+    await device.queue.put(dict(type="tilt", pitch_deg=70, roll_deg=70, still=True))
+    reading = await device.sample_tilt()
+    assert sent == ["IMU"]
+    assert reading == dict(pitch_deg=1.25, roll_deg=-0.5, still=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pitch,still", [(float("nan"), True), (91, True), (True, True), (1, False)]
+)
+async def test_imu_capture_rejects_invalid_or_moving_samples(pitch, still):
+    device = SerialDevice()
+
+    async def send(command):
+        await device.queue.put(
+            dict(type="tilt", pitch_deg=pitch, roll_deg=0, still=still)
+        )
+
+    device.send = send
+    with pytest.raises(DeviceError):
+        await device.sample_tilt()

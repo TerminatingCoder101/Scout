@@ -6,6 +6,7 @@ Vexcel uses X-API-KEY. No remote mutations or local hardware motion here.
 
 import asyncio
 import csv
+import hashlib
 import io
 import json
 import math
@@ -587,6 +588,20 @@ def inspection_context(request):
         action_index=request.sponsor_action_index,
         property_id=doc["property"]["id"],
         property_name=doc["property"]["name"],
+        property_address=doc["property"].get("address", ""),
+        evidence_provenance={
+            "costar": doc["property"].get("provenance", {}),
+            "costar_facts": doc["property"].get("facts", {}),
+            "matterport": {
+                k: (doc.get("matterport") or {}).get(k)
+                for k in ("created", "created_note", "retrieved_at", "image")
+            },
+            "vexcel": {
+                k: (doc.get("vexcel") or {}).get(k)
+                for k in ("retrieved_at", "capture_date", "image", "extent")
+            },
+            "match_warnings": doc.get("match_warnings", []),
+        },
         model_id=doc["model_id"],
         target_location=action["location"],
         title=action["title"],
@@ -615,7 +630,60 @@ def linked_inspections(id: str):
             atlas_status=d.get("atlas_status"),
             verdict=(d.get("result") or {}).get("verdict"),
             context=d["sponsor_context"],
+            history_scope=d.get("history_scope"),
         )
         for d in docs
         if (d.get("sponsor_context") or {}).get("review_id") == id
     ]
+
+
+def history_scope(request, context=None):
+    """Measurement baselines are separate from the property/model being inspected."""
+    location = request.location_id or request.profile
+    if context:
+        building = context["property_id"]
+        if context["execution_site"] == "local_fixture":
+            building = "fixture-" + building
+        location = context["model_id"] + "-" + location
+    else:
+        building = request.building_id
+
+    def bounded(value):
+        return (
+            value
+            if len(value) <= 120
+            else value[:95] + "-" + hashlib.sha256(value.encode()).hexdigest()[:24]
+        )
+
+    return {"building_id": bounded(building), "location_id": bounded(location)}
+
+
+def matching_baselines(context, location_id):
+    matches = [
+        t
+        for t in db.twins()
+        if t.get("verified")
+        and all(
+            t.get(k) == context[k]
+            for k in ("property_id", "model_id", "execution_site")
+        )
+        and t.get("location_id") == location_id
+    ]
+    return sorted(
+        matches, key=lambda t: (t.get("captured_at", ""), t["id"]), reverse=True
+    )
+
+
+@router.get("/reviews/{id}/baselines")
+def plan_baselines(id: str, location_id: str, execution_site: str = "local_fixture"):
+    doc = review(id)
+    if execution_site not in ("local_fixture", "property_site"):
+        raise HTTPException(422, "Invalid execution site")
+    return matching_baselines(
+        dict(
+            property_id=doc["property"]["id"],
+            model_id=doc["model_id"],
+            execution_site=execution_site,
+        ),
+        location_id,
+    )

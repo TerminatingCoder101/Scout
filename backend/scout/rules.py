@@ -196,15 +196,35 @@ def evaluate(points, tilt, request, settings, twin):
             settings["slope_error_deg"],
         ),
     ]:
+        reference_error = twin.get(
+            {
+                "width": "width_uncertainty_in",
+                "running_slope": "running_slope_uncertainty_deg",
+                "cross_slope": "cross_slope_uncertainty_deg",
+            }[key]
+        )
+        bound = None if reference_error is None else tolerance + reference_error
+        comparable = (
+            request.use_baseline
+            and value is not None
+            and expected is not None
+            and bound is not None
+        )
         drift.append(
             dict(
                 key=key,
                 label=label,
                 measured=value,
                 expected=expected,
-                delta=None if value is None else value - expected,
+                delta=None
+                if value is None or expected is None or not request.use_baseline
+                else value - expected,
                 unit=unit,
-                changed=value is not None and abs(value - expected) > tolerance,
+                combined_uncertainty=bound,
+                comparison_status="changed"
+                if comparable and abs(value - expected) > bound
+                else "inconclusive",
+                changed=bool(comparable and abs(value - expected) > bound),
             )
         )
     return dict(
@@ -215,7 +235,7 @@ def evaluate(points, tilt, request, settings, twin):
         running_slope_deg=pitch,
         cross_slope_deg=roll,
         issues=issues,
-        drift=drift,
+        drift=drift if request.use_baseline else [],
         noisy_angles=[p["angle_deg"] for p in noisy],
         rule_version=RULE_VERSION,
         scope="Screening of measured dimensions only; not a full accessibility certification.",

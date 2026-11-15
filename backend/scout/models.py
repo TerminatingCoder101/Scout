@@ -9,18 +9,44 @@ class StrictModel(BaseModel):
 
 
 class Twin(StrictModel):
+    property_id: str | None = Field(default=None, max_length=120)
+    model_id: str | None = Field(default=None, max_length=32)
+    location_id: str | None = Field(default=None, max_length=120)
+    execution_site: Literal["local_fixture", "property_site"] | None = None
+    verified: bool = False
+    verification_notes: str = Field(default="", max_length=2000)
+    source_inspection_id: str | None = None
+    width_uncertainty_in: float | None = Field(default=None, ge=0, le=250)
+    running_slope_uncertainty_deg: float | None = Field(default=None, ge=0, le=45)
+    cross_slope_uncertainty_deg: float | None = Field(default=None, ge=0, le=45)
+
+    @model_validator(mode="after")
+    def validate_scope(self):
+        scope = (self.property_id, self.model_id, self.location_id, self.execution_site)
+        if any(scope) and not all(scope):
+            raise ValueError(
+                "Provide property, model, location and fixture/site together"
+            )
+        if self.verified and not self.verification_notes.strip():
+            raise ValueError("Verified baselines require verification notes")
+        return self
+
     id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
     name: str = Field(min_length=1, max_length=120)
     location: str = Field(default="", max_length=200)
-    source: Literal["demo", "manual", "matterport_export", "costar_export"] = "manual"
+    source: Literal[
+        "demo", "manual", "matterport_export", "costar_export", "scout_inspection"
+    ] = "manual"
     source_reference: str = Field(default="", max_length=500)
     width_in: float = Field(gt=0, le=250)
-    running_slope_deg: float = Field(default=0, ge=0, le=45)
-    cross_slope_deg: float = Field(default=0, ge=0, le=45)
+    running_slope_deg: float | None = Field(default=None, ge=0, le=45)
+    cross_slope_deg: float | None = Field(default=None, ge=0, le=45)
     captured_at: str = Field(default="", max_length=50)
 
 
 class SponsorContext(StrictModel):
+    property_address: str = ""
+    evidence_provenance: dict = Field(default_factory=dict)
     review_id: str
     plan_id: str
     action_index: int = Field(ge=0)
@@ -36,6 +62,7 @@ class SponsorContext(StrictModel):
 
 
 class ScanRequest(StrictModel):
+    use_baseline: bool = True
     sponsor_review_id: str | None = Field(default=None, max_length=80)
     sponsor_action_index: int = Field(default=0, ge=0, le=7)
     execution_site: Literal["local_fixture", "property_site"] = "local_fixture"
@@ -133,6 +160,9 @@ class InspectionTilt(StrictModel):
 
 
 class InspectionCreate(StrictModel):
+    baseline_used: bool = False
+    baseline_snapshot: Twin | None = None
+    operator_location_id: str | None = Field(default=None, max_length=120)
     sponsor_context: SponsorContext | None = None
     scan_id: str | None = Field(default=None, max_length=80)
     source_mode: Literal["demo", "hardware"] | None = None
@@ -179,3 +209,9 @@ class InspectionReview(StrictModel):
         if len({f.key for f in self.findings}) != len(self.findings):
             raise ValueError("Finding keys must be unique")
         return self
+
+
+class BaselineFromInspection(StrictModel):
+    name: str = Field(min_length=1, max_length=120)
+    notes: str = Field(min_length=1, max_length=2000)
+    confirmed: bool = False

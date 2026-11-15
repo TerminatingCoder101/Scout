@@ -299,3 +299,21 @@ See [the judge walkthrough](docs/JUDGE_DEMO.md) for the full demonstration and
 local recording command. Live sponsor access depends on provider credentials and
 the event's data availability. Existing saved evidence/plans can be transparently
 shown as prior runs when providers are unavailable.
+
+For an implementation-level explanation of the main dashboard's CoStar →
+Matterport/Vexcel → agent plan → measurement → Atlas → review flow, see
+[Connected workflow](docs/CONNECTED_WORKFLOW.md). Measurement baselines are
+separate from property identity; linked history uses the CoStar property and
+Matterport model, with a separate `fixture-` building namespace for demonstrations.
+
+**Site baselines** replaces the Digital twins navigation label. It manages verified,
+location-specific reference measurements, independently of the Matterport viewer.
+Create a reference from a reviewed History record, or enter verified manual values
+and scope. Matching references are suggested for subsequent plan-linked inspections;
+when none exists, run without baseline comparison. See the Site baselines section
+of [Connected workflow](docs/CONNECTED_WORKFLOW.md).
+
+Calibration lab now captures fresh IMU readings, forward/reverse positions, and
+an explicitly confirmed known-level zero. Relative tare is display-only and never
+zeros inspection slopes. Flash the updated sketch first. See
+[IMU calibration instructions](docs/HARDWARE.md#imu-calibration-and-tare).

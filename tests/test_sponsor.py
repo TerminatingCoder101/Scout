@@ -283,3 +283,28 @@ def test_plan_to_inspection_context_and_site_guard(prepared):
 
 def property_doc_for_link():
     return dict(id="commercial-1", name="Synthetic property", address="Fixture")
+
+
+def test_history_scope_separates_properties_models_and_fixture_from_site():
+    from scout.models import ScanRequest
+
+    request = ScanRequest(building_id="shared-baseline", location_id="east-door")
+    context = dict(
+        property_id="commercial-1", model_id="model123", execution_site="local_fixture"
+    )
+    fixture = sponsor.history_scope(request, context)
+    site = sponsor.history_scope(request, context | {"execution_site": "property_site"})
+    other = sponsor.history_scope(request, context | {"property_id": "commercial-2"})
+    model = sponsor.history_scope(request, context | {"model_id": "model456"})
+    assert fixture == dict(
+        building_id="fixture-commercial-1", location_id="model123-east-door"
+    )
+    assert site["building_id"] == "commercial-1"
+    assert len({tuple(x.values()) for x in (fixture, site, other, model)}) == 4
+    assert sponsor.history_scope(request) == dict(
+        building_id="shared-baseline", location_id="east-door"
+    )
+    long = sponsor.history_scope(
+        request.model_copy(update={"location_id": "x" * 120}), context
+    )
+    assert len(long["location_id"]) <= 120

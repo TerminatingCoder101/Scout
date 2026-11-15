@@ -13,9 +13,15 @@ from fastapi import APIRouter, HTTPException, Query
 from pymongo import AsyncMongoClient, DESCENDING
 from pymongo.errors import PyMongoError
 
-from . import db
+from . import db, sponsor
 from .config import mongodb_settings
-from .models import InspectionCreate, InspectionReview
+from .models import (
+    InspectionCreate,
+    InspectionReview,
+    ScanRequest,
+    Twin,
+    BaselineFromInspection,
+)
 
 
 class InspectionUnavailable(RuntimeError):
@@ -410,8 +416,28 @@ async def sync_local_inspections():
                 skipped += 1
                 continue
             try:
+                if doc.get("sponsor_context") and not doc.get("history_scope"):
+                    doc["history_scope"] = sponsor.history_scope(
+                        ScanRequest.model_validate(doc["request"]),
+                        doc["sponsor_context"],
+                    )
                 async with store.operation() as c:
                     existing = await c.find_one({"scan_id": doc["id"]})
+                    if (
+                        existing
+                        and doc.get("history_scope")
+                        and any(
+                            existing.get(k) != v
+                            for k, v in doc["history_scope"].items()
+                        )
+                    ):
+                        await c.update_one(
+                            {"_id": existing["_id"]},
+                            {
+                                "$set": doc["history_scope"]
+                                | {"history_scope_migrated_at": db.now()}
+                            },
+                        )
                 if existing:
                     saved_id = str(existing["_id"])
                     skipped += 1
@@ -484,6 +510,67 @@ async def review_inspection(id: str, payload: InspectionReview):
     return await store.get(id)
 
 
+@router.post("/{id}/baseline", status_code=201)
+async def baseline_from_inspection(id: str, payload: BaselineFromInspection):
+    record = await store.get(id)
+    if record["review_status"] != "reviewed" or not payload.confirmed:
+        raise HTTPException(
+            409, "Review this inspection and confirm its reference measurements first."
+        )
+    measurements = {m["key"]: m for m in record["measurements"]}
+    width = measurements.get("width")
+    if not width or width["value"] is None or width["unit"] not in ("in", "cm"):
+        raise HTTPException(
+            422, "A measured width in inches or centimeters is required."
+        )
+    factor = 1 / 2.54 if width["unit"] == "cm" else 1
+    context = record.get("sponsor_context") or {}
+    location = record.get("operator_location_id") or record["location_id"]
+    prefix = context.get("model_id", "") + "-"
+    if (
+        context
+        and not record.get("operator_location_id")
+        and location.startswith(prefix)
+    ):
+        location = location[len(prefix) :]
+    values = dict(
+        id="baseline-" + id,
+        name=payload.name,
+        source="scout_inspection",
+        source_reference="Reviewed Atlas inspection " + id,
+        source_inspection_id=id,
+        captured_at=record["timestamp"].date().isoformat(),
+        location=context.get("target_location", location),
+        width_in=width["value"] * factor,
+        width_uncertainty_in=width["uncertainty"] * factor,
+        verified=True,
+        verification_notes=payload.notes,
+    )
+    if context:
+        values.update(
+            property_id=context["property_id"],
+            model_id=context["model_id"],
+            location_id=location,
+            execution_site=context["execution_site"],
+        )
+    for key, field in (
+        ("running_slope", "running_slope_deg"),
+        ("cross_slope", "cross_slope_deg"),
+    ):
+        m = measurements.get(key)
+        if m and m["value"] is not None and m["unit"] == "deg":
+            values[field] = m["value"]
+            values[field.replace("_deg", "_uncertainty_deg")] = m["uncertainty"]
+    try:
+        baseline = Twin(**values)
+    except ValueError:
+        raise HTTPException(
+            422, "Measurements are outside the supported baseline range."
+        ) from None
+    existing = await asyncio.to_thread(db.get_twin, baseline.id)
+    return existing or await asyncio.to_thread(db.put_twin, baseline.model_dump())
+
+
 @router.get("/{id}")
 async def get_inspection(id: str):
     return await store.get(id)
@@ -515,10 +602,23 @@ async def save_completed_scan(doc):
     checks = result.get("checks", [])
     payload = InspectionCreate(
         scan_id=doc["id"],
+        baseline_used=doc.get(
+            "baseline_used", doc["request"].get("use_baseline", True)
+        ),
+        baseline_snapshot=doc.get("twin")
+        if doc.get("baseline_used", doc["request"].get("use_baseline", True))
+        else None,
+        operator_location_id=doc["request"].get("location_id")
+        or doc["request"]["profile"],
         sponsor_context=doc.get("sponsor_context"),
         source_mode=doc["request"]["mode"],
-        building_id=doc["request"]["building_id"],
-        location_id=doc["request"].get("location_id") or doc["request"]["profile"],
+        building_id=(doc.get("history_scope") or {}).get(
+            "building_id", doc["request"]["building_id"]
+        ),
+        location_id=(doc.get("history_scope") or {}).get(
+            "location_id",
+            doc["request"].get("location_id") or doc["request"]["profile"],
+        ),
         timestamp=doc["completed_at"],
         raw_sensor_measurements=doc.get("points", []),
         raw_tilt={

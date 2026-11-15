@@ -46,7 +46,15 @@ def work_order_pdf(scan):
             "SmallNote",
         ),
         Spacer(1, 14),
-        p(scan["twin"]["name"], "Heading1"),
+        p(
+            (
+                "Measurement-only inspection"
+                if scan.get("baseline_used") is False
+                else ("Measurement reference: " if scan.get("sponsor_context") else "")
+                + scan["twin"]["name"]
+            ),
+            "Heading1",
+        ),
         p(f"{r['verdict']} - measured checks only", "Heading2"),
         p(
             f"Input: {scan['request']['mode'].upper()} | Profile: {scan['request']['profile']} | Agent: {scan['agent_provider']}"
@@ -62,6 +70,59 @@ def work_order_pdf(scan):
                 "Heading3",
             )
         ]
+    context = scan.get("sponsor_context")
+    if context:
+        story += [
+            p("Sponsor evidence and inspection task", "Heading2"),
+            p(context["property_name"] + " | " + context["property_id"]),
+            p(context.get("property_address", "")),
+            p(
+                "Plan: "
+                + context["plan_id"]
+                + " | Matterport model: "
+                + context["model_id"],
+                "SmallNote",
+            ),
+            p("Target: " + context["target_location"]),
+            p("Action: " + context["title"]),
+            p("Why prioritized: " + context["reason"]),
+            p("Evidence: " + ", ".join(context["sources"]), "SmallNote"),
+            p(
+                "This scan records the selected profile's measured checks only. The broader plan action remains subject to human/site verification.",
+                "SmallNote",
+            ),
+            p(
+                "LOCAL FIXTURE - not measurements of the remote sponsor property."
+                if context["execution_site"] == "local_fixture"
+                else "PROPERTY SITE - rig location confirmed by operator.",
+                "Heading3",
+            ),
+        ]
+        provenance = context.get("evidence_provenance") or {}
+        costar = provenance.get("costar") or {}
+        story.append(
+            p(
+                "CoStar dataset: "
+                + str(costar.get("dataset", "not recorded"))
+                + " | Imported: "
+                + str(costar.get("imported_at", "not recorded")),
+                "SmallNote",
+            )
+        )
+        for layer in ("matterport", "vexcel"):
+            evidence = provenance.get(layer) or {}
+            story.append(
+                p(
+                    layer.title()
+                    + " retrieved: "
+                    + str(evidence.get("retrieved_at") or "not recorded")
+                    + " | Capture date: "
+                    + str(evidence.get("capture_date") or "not verified"),
+                    "SmallNote",
+                )
+            )
+        for warning in provenance.get("match_warnings", []):
+            story.append(p("Match warning: " + warning, "SmallNote"))
     if scan.get("ai_error"):
         story += [p(scan["ai_error"])]
     rows = [[p("Measurement"), p("Observed"), p("Requirement"), p("Result")]]
@@ -99,22 +160,46 @@ def work_order_pdf(scan):
     story += [
         Spacer(1, 14),
         table,
-        p("Digital twin comparison", "Heading2"),
+        p("Site baseline comparison", "Heading2"),
         p(
-            f"Source: {scan['twin']['source']} | {scan['twin']['source_reference']}",
+            "No baseline selected; reference drift is unavailable."
+            if scan.get("baseline_used") is False
+            else f"Source: {scan['twin']['source']} | {scan['twin']['source_reference']}",
             "SmallNote",
         ),
     ]
     for d in r["drift"]:
-        if d["measured"] is not None:
+        if (
+            d["measured"] is not None
+            and d["expected"] is not None
+            and d["delta"] is not None
+        ):
             story.append(
                 p(
                     f"{d['label']}: baseline {d['expected']:.2f} {d['unit']}; observed {d['measured']:.2f}; drift {d['delta']:+.2f} {d['unit']}"
                 )
             )
+            if "comparison_status" in d:
+                bound = d.get("combined_uncertainty")
+                story.append(
+                    p(
+                        "Reference comparison: "
+                        + d["comparison_status"]
+                        + (
+                            " | reference uncertainty not recorded"
+                            if bound is None
+                            else f" | combined uncertainty +/- {bound:.2f} {d['unit']}"
+                        ),
+                        "SmallNote",
+                    )
+                )
     story += [
-        p("Corrective work", "Heading2"),
-        p(f"Status: {w['status']} | Assignee: {w['assignee'] or 'Unassigned'}"),
+        KeepTogether(
+            [
+                p("Corrective work", "Heading2"),
+                p(f"Status: {w['status']} | Assignee: {w['assignee'] or 'Unassigned'}"),
+            ]
+        ),
     ]
     for i, a in enumerate(w["actions"], 1):
         cost = (

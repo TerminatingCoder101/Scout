@@ -1,13 +1,23 @@
 export type Verdict = "PASS" | "FAIL" | "VERIFY" | "NOT_MEASURED";
 export interface Twin {
+  property_id?: string | null;
+  model_id?: string | null;
+  location_id?: string | null;
+  execution_site?: "local_fixture" | "property_site" | null;
+  verified?: boolean;
+  verification_notes?: string;
+  source_inspection_id?: string | null;
+  width_uncertainty_in?: number | null;
+  running_slope_uncertainty_deg?: number | null;
+  cross_slope_uncertainty_deg?: number | null;
   id: string;
   name: string;
   location: string;
   source: string;
   source_reference: string;
   width_in: number;
-  running_slope_deg: number;
-  cross_slope_deg: number;
+  running_slope_deg: number | null;
+  cross_slope_deg: number | null;
   captured_at: string;
 }
 export interface Point {
@@ -40,7 +50,9 @@ export interface Result {
     key: string;
     label: string;
     measured: number | null;
-    expected: number;
+    expected: number | null;
+    combined_uncertainty?: number | null;
+    comparison_status?: string;
     delta: number | null;
     unit: string;
     changed: boolean;
@@ -78,6 +90,8 @@ export interface WorkOrder {
   }[];
 }
 export interface SponsorContext {
+  property_address?: string;
+  evidence_provenance?: Record<string, unknown>;
   review_id: string;
   plan_id: string;
   property_id: string;
@@ -92,6 +106,8 @@ export interface SponsorContext {
   execution_site: "local_fixture" | "property_site";
 }
 export interface Scan {
+  baseline_used?: boolean;
+  history_scope?: { building_id: string; location_id: string };
   sponsor_context?: SponsorContext | null;
   atlas_status?: "saving" | "saved" | "failed";
   atlas_error?: string;
@@ -149,6 +165,12 @@ export interface Settings {
   button_use_ai: boolean;
 }
 export interface Device {
+  imu_check?: {
+    available: boolean;
+    stable: boolean;
+    identity?: number;
+    address?: number;
+  } | null;
   connected: boolean;
   port: string | null;
   error: string | null;

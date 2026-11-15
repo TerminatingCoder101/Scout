@@ -1313,3 +1313,5 @@
     transition: none !important;
   }
 }
+
+.qi-brand .scout-logo { display: block; width: 220px; max-width: 100%; height: auto; }

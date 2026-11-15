@@ -193,3 +193,145 @@ def test_atlas_failure_keeps_completed_local_inspection(client):
     assert scan["atlas_status"] == "failed"
     assert "saved locally" in scan["atlas_error"]
     assert len(scan["points"]) == 37
+
+
+def test_linked_plan_flows_through_scan_work_order_and_atlas(client, monkeypatch):
+    from scout import inspections, sponsor
+    from bson import ObjectId
+    from unittest.mock import AsyncMock
+
+    review = dict(
+        id="flow-review",
+        status="completed",
+        location_confirmed=True,
+        property=dict(
+            id="commercial-flow",
+            name="Fixture property",
+            address="Test address",
+            provenance={"provider": "CoStar", "join": "explicit mapping"},
+            facts={"stories": 2},
+        ),
+        model_id="modelFlow",
+        layers=["costar", "matterport"],
+        plan=dict(
+            id="PLAN-FLOW",
+            actions=[
+                dict(
+                    title="Check entrance",
+                    location="East door",
+                    reason="Joined context and geometry",
+                    next_action="Measure opening",
+                    sources=["costar", "matterport"],
+                )
+            ],
+        ),
+    )
+    sponsor.put_review(review)
+    save = AsyncMock(return_value={"id": str(ObjectId())})
+    monkeypatch.setattr(inspections.store, "create", save)
+    started = client.post(
+        "/api/scans",
+        json={
+            "scenario": "clear",
+            "sponsor_review_id": "flow-review",
+            "use_baseline": False,
+            "location_id": "east-door",
+        },
+    )
+    assert started.status_code == 202
+    scan = complete(client, started.json()["id"])
+    assert scan["atlas_status"] == "saved"
+    assert scan["history_scope"]["building_id"] == "fixture-commercial-flow"
+    assert scan["work_order"]["sponsor_context"]["plan_id"] == "PLAN-FLOW"
+    payload = save.call_args.args[0]
+    assert payload.building_id == "fixture-commercial-flow"
+    assert payload.location_id == "modelFlow-east-door"
+    assert payload.sponsor_context.evidence_provenance["costar"]["provider"] == "CoStar"
+    assert payload.sponsor_context.execution_site == "local_fixture"
+    linked = client.get("/api/sponsor/reviews/flow-review/inspections").json()
+    assert linked[0]["history_scope"] == scan["history_scope"]
+    from io import BytesIO
+    from pypdf import PdfReader
+
+    pdf = client.get(f"/api/scans/{scan['id']}/report.pdf")
+    report_text = " ".join(
+        p.extract_text() for p in PdfReader(BytesIO(pdf.content)).pages
+    )
+    assert "Sponsor evidence and inspection task" in report_text
+    assert "PLAN-FLOW" in report_text and "LOCAL FIXTURE" in report_text
+    assert "Measurement-only inspection" in report_text
+
+
+def test_imu_calibration_capture_and_level_confirmation(client, monkeypatch):
+    from scout.service import manager
+    from unittest.mock import AsyncMock
+    from scout.hardware import DeviceError
+
+    old = config.snapshot()
+    monkeypatch.setattr(manager.device, "connect", AsyncMock())
+    sample = AsyncMock(return_value=dict(pitch_deg=0.8, roll_deg=-1.2, still=True))
+    monkeypatch.setattr(manager.device, "sample_tilt", sample)
+    try:
+        assert (
+            client.post(
+                "/api/calibration/level", json={"confirmed_level": False}
+            ).status_code
+            == 422
+        )
+        sample.assert_not_awaited()
+        result = client.post("/api/calibration/read-imu").json()
+        assert result["pitch_deg"] == 0.8
+        assert config.snapshot()["pitch_bias_deg"] == old["pitch_bias_deg"]
+        response = client.post("/api/calibration/level", json={"confirmed_level": True})
+        assert response.status_code == 200
+        assert config.snapshot()["pitch_bias_deg"] == 0.8
+        assert config.snapshot()["roll_bias_deg"] == -1.2
+        assert not config.snapshot()["calibration_verified"]
+        monkeypatch.setattr(manager, "active_id", "busy-scan")
+        assert client.post("/api/calibration/read-imu").status_code == 409
+        monkeypatch.setattr(manager, "active_id", None)
+        sample.side_effect = DeviceError("Hold the rig still")
+        assert client.post("/api/calibration/read-imu").status_code == 400
+    finally:
+        config.update(
+            {
+                k: old[k]
+                for k in ("pitch_bias_deg", "roll_bias_deg", "calibration_verified")
+            }
+        )
+
+
+def test_ai_inspection_preserves_hardware_failure_instead_of_blaming_google(
+    client, monkeypatch
+):
+    from scout import agent
+    from scout.service import manager
+    from scout.hardware import DeviceError
+    from unittest.mock import AsyncMock
+
+    config.update({"gemini_api_key": "test-key"})
+    monkeypatch.setattr(manager.device, "connect", AsyncMock())
+    monkeypatch.setattr(
+        manager.device,
+        "sweep",
+        AsyncMock(side_effect=DeviceError("IMU not detected. Check wiring.")),
+    )
+    monkeypatch.setattr(manager.device, "stop", AsyncMock())
+
+    async def run(context):
+        await context.sweep()
+
+    monkeypatch.setattr(agent, "run_deep_agent", run)
+    response = client.post("/api/scans", json={"mode": "hardware", "use_ai": True})
+    assert response.status_code == 202
+    scan = complete(client, response.json()["id"])
+    assert scan["status"] == "failed"
+    assert scan["error"] == "IMU not detected. Check wiring."
+    assert scan["device_error"] == scan["error"]
+    assert "ai_error" not in scan
+    notices = [
+        e
+        for e in client.get(f"/api/scans/{scan['id']}/timeline").json()
+        if e["kind"] == "notice"
+    ]
+    assert notices[-1]["data"]["stage"] == "hardware"

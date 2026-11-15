@@ -4,6 +4,7 @@ import io
 import json
 import re
 import secrets
+import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -13,7 +14,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from . import db, rules, vision, inspections, sponsor
 from .config import config, DATA, ROOT
-from .hardware import ports, DeviceError
+from .hardware import ports, DeviceError, capture_camera
 from .models import (
     ScanRequest,
     SettingsUpdate,
@@ -178,6 +179,44 @@ async def serial_ports():
     return await asyncio.to_thread(ports)
 
 
+class CameraTest(BaseModel):
+    camera_index: int | None = Field(default=None, ge=0, le=10)
+
+
+@app.post("/api/hardware/test-camera", dependencies=protected)
+async def test_camera(payload: CameraTest | None = None):
+    async with manager.lock:
+        if manager.active_id:
+            raise HTTPException(
+                409, "Wait for the inspection to finish before testing the camera."
+            )
+        index = (
+            payload.camera_index
+            if payload and payload.camera_index is not None
+            else config.snapshot()["camera_index"]
+        )
+        name = str(uuid.uuid4()) + "-1.jpg"
+        try:
+            await asyncio.to_thread(capture_camera, index, DATA / "images" / name)
+        except DeviceError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        preview = dict(
+            camera_index=index, url="/api/images/" + name, captured_at=db.now()
+        )
+        marker = DATA / "camera-preview.json"
+        marker.write_text(json.dumps(preview))
+        return preview
+
+
+@app.get("/api/hardware/camera-preview", dependencies=protected)
+async def camera_preview():
+    path = DATA / "camera-preview.json"
+    try:
+        return json.loads(path.read_text()) if path.is_file() else None
+    except (OSError, ValueError):
+        return None
+
+
 @app.post("/api/hardware/connect", dependencies=protected)
 async def connect():
     if manager.active_id:
@@ -204,6 +243,12 @@ async def list_twins():
 
 @app.post("/api/twins", dependencies=protected)
 async def put_twin(payload: Twin):
+    if payload.property_id:
+        prop = sponsor.property_record(payload.property_id)
+        if payload.model_id not in prop["model_ids"]:
+            raise HTTPException(
+                422, "Baseline model must be linked to its CoStar property."
+            )
     return db.put_twin(payload.model_dump())
 
 
@@ -341,6 +386,50 @@ async def image(name: str):
     return FileResponse(path, media_type="image/jpeg")
 
 
+class LevelReference(BaseModel):
+    confirmed_level: bool = False
+
+
+async def capture_calibration_tilt():
+    # Same lock as scan start; serial command lock also serializes device traffic.
+    if manager.active_id:
+        raise HTTPException(409, "Wait for the inspection to finish.")
+    try:
+        await manager.device.connect(config.snapshot()["serial_port"])
+        return await manager.device.sample_tilt()
+    except DeviceError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/calibration/read-imu", dependencies=protected)
+async def read_calibration_imu():
+    async with manager.lock:
+        return await capture_calibration_tilt()
+
+
+@app.post("/api/calibration/level", dependencies=protected)
+async def level_reference(payload: LevelReference):
+    if not payload.confirmed_level:
+        raise HTTPException(
+            422, "Confirm the rig is on an independently verified level surface."
+        )
+    async with manager.lock:
+        reading = await capture_calibration_tilt()
+        if abs(reading["pitch_deg"]) > 10 or abs(reading["roll_deg"]) > 10:
+            raise HTTPException(
+                400,
+                "Tilt exceeds plausible zero bias. Check the level reference and IMU mounting.",
+            )
+        config.update(
+            dict(
+                pitch_bias_deg=reading["pitch_deg"],
+                roll_bias_deg=reading["roll_deg"],
+                calibration_verified=False,
+            )
+        )
+        return dict(reading=reading, settings=config.public())
+
+
 @app.post("/api/calibration/flip", dependencies=protected)
 async def calibrate(payload: CalibrationRequest):
     if manager.active_id:
@@ -425,9 +514,9 @@ async def favicon():
 
 
 @app.get("/")
-@app.get(
-    "/business"
-)  # simple one-click page for business users (same app, see frontend/src/main.tsx)
+# @app.get(
+#     "/business"
+# )  # simple one-click page for business users (same app, see frontend/src/main.tsx)
 async def index():
     if (frontend / "index.html").exists():
         return FileResponse(frontend / "index.html")

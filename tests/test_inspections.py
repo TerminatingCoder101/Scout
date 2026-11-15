@@ -334,3 +334,79 @@ def test_human_review_keeps_measurements_and_original_keys(atlas):
         ).status_code
         == 422
     )
+
+
+def test_reviewed_inspection_creates_scoped_baseline_without_inventing_slopes(atlas):
+    from scout import sponsor
+
+    client, _ = atlas
+    context = dict(
+        review_id="review",
+        plan_id="PLAN",
+        action_index=0,
+        property_id="commercial-reference",
+        property_name="Reference property",
+        model_id="modelRef",
+        target_location="East entrance",
+        title="Measure entrance",
+        reason="Combined layers",
+        next_action="Measure",
+        sources=["costar", "matterport"],
+        execution_site="local_fixture",
+    )
+    record = client.post(
+        "/api/inspections",
+        json=payload(
+            sponsor_context=context,
+            location_id="modelRef-east-door",
+            operator_location_id="east-door",
+            measurements=[dict(key="width", value=86.36, unit="cm", uncertainty=2.54)],
+            review_status="pending",
+        ),
+    ).json()
+    body = dict(
+        name="East door reference",
+        notes="Verified against a physical reference",
+        confirmed=True,
+    )
+    assert (
+        client.post(f"/api/inspections/{record['id']}/baseline", json=body).status_code
+        == 409
+    )
+    record = client.post(
+        "/api/inspections",
+        json=payload(
+            sponsor_context=context,
+            location_id="modelRef-east-door",
+            operator_location_id="east-door",
+            measurements=[dict(key="width", value=86.36, unit="cm", uncertainty=2.54)],
+            review_status="reviewed",
+        ),
+    ).json()
+    assert (
+        client.post(
+            f"/api/inspections/{record['id']}/baseline",
+            json=body | {"confirmed": False},
+        ).status_code
+        == 409
+    )
+    response = client.post(f"/api/inspections/{record['id']}/baseline", json=body)
+    assert response.status_code == 201
+    baseline = response.json()
+    assert baseline["width_in"] == pytest.approx(34)
+    assert baseline["width_uncertainty_in"] == pytest.approx(1)
+    assert baseline["running_slope_deg"] is None and baseline["cross_slope_deg"] is None
+    assert baseline["source_inspection_id"] == record["id"]
+    assert baseline["verified"] and baseline["execution_site"] == "local_fixture"
+    assert baseline["location_id"] == "east-door"
+    assert sponsor.matching_baselines(context, "east-door")[0]["id"] == baseline["id"]
+    assert (
+        sponsor.matching_baselines(
+            context | {"execution_site": "property_site"}, "east-door"
+        )
+        == []
+    )
+    assert (
+        client.post(f"/api/inspections/{record['id']}/baseline", json=body).json()["id"]
+        == baseline["id"]
+    )

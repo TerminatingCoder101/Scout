@@ -106,7 +106,14 @@ beforeEach(() => {
       else if (path === "/api/scans/scan-one/cancel") {
         store[0] = { ...store[0], status: "cancelled" };
         value = store[0];
-      } else if (path === "/api/hardware/ports") value = [];
+      } else if (path === "/api/hardware/camera-preview") value = null;
+      else if (path === "/api/hardware/test-camera")
+        value = {
+          camera_index: body.camera_index,
+          url: "/api/images/test-frame.jpg",
+          captured_at: "2026-11-15T12:00:00Z",
+        };
+      else if (path === "/api/hardware/ports") value = [];
       else if (path === "/api/settings" && method === "PATCH")
         value = { ...settings, ...body };
       else if (path === "/api/settings") value = settings;
@@ -147,7 +154,11 @@ describe("Inspection workspace", () => {
     await user.click(screen.getByRole("button", { name: "New inspection" }));
     const modal = screen.getByRole("dialog");
     expect(
-      (within(modal).getByRole("checkbox") as HTMLInputElement).disabled,
+      (
+        within(modal).getByRole("checkbox", {
+          name: /Use DeepAgent/,
+        }) as HTMLInputElement
+      ).disabled,
     ).toBe(true);
     await user.selectOptions(
       within(modal).getByLabelText("Inspection profile"),
@@ -240,7 +251,7 @@ describe("Inspection workspace", () => {
     await loaded();
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(await screen.findByLabelText("Gemini API key")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Digital twins" }));
+    await user.click(screen.getByRole("button", { name: "Site baselines" }));
     expect(screen.getByRole("button", { name: "Add baseline" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Work orders" }));
     expect(screen.getByText("The next step, already organized.")).toBeTruthy();
@@ -300,4 +311,70 @@ it("closes the new inspection dialog with Escape", async () => {
   await user.click(screen.getByRole("button", { name: "New inspection" }));
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("captures calibration positions from hardware and keeps relative tare separate", async () => {
+  const original = globalThis.fetch;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string, options?: RequestInit) => {
+      if (path === "/api/calibration/read-imu") {
+        requests.push({ path, body: {}, method: "POST" });
+        return new Response(
+          JSON.stringify({ pitch_deg: 1.25, roll_deg: -0.5, still: true }),
+          { status: 200 },
+        );
+      }
+      return original(path, options);
+    }),
+  );
+  const user = userEvent.setup();
+  await loaded();
+  await user.click(screen.getByRole("button", { name: "Calibration lab" }));
+  await user.click(
+    screen.getByRole("button", { name: "Capture forward position" }),
+  );
+  expect(
+    (screen.getByLabelText("forward pitch (°)") as HTMLInputElement).value,
+  ).toBe("1.25");
+  expect(
+    (screen.getByLabelText("forward roll (°)") as HTMLInputElement).value,
+  ).toBe("-0.5");
+  await user.click(
+    screen.getByRole("button", { name: "Tare relative display here" }),
+  );
+  expect(
+    await screen.findByText(/Relative display: pitch 0.000°/),
+  ).toBeTruthy();
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Save known-level zero",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  expect(
+    requests.some(
+      (r) =>
+        r.path === "/api/calibration/level" ||
+        r.path === "/api/calibration/flip",
+    ),
+  ).toBe(false);
+});
+
+it("captures and displays a test frame beside the camera setting", async () => {
+  const user = userEvent.setup();
+  await loaded();
+  await user.click(screen.getByRole("button", { name: "Settings" }));
+  const index = screen.getByLabelText("Camera index");
+  await user.clear(index);
+  await user.type(index, "2");
+  await user.click(screen.getByRole("button", { name: "Capture test frame" }));
+  expect(await screen.findByAltText("Test frame from camera 2")).toBeTruthy();
+  expect(
+    requests.some(
+      (r) =>
+        r.path === "/api/hardware/test-camera" && r.body.camera_index === 2,
+    ),
+  ).toBe(true);
 });

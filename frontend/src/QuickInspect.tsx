@@ -1,3 +1,4 @@
+import scoutLogo from "./assets/scout-logo.svg";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Plug,
@@ -1207,15 +1208,13 @@ const verdictWord = (v: string | undefined, status: string) =>
 function Brand() {
   return (
     <div className="qi-brand">
-      <svg viewBox="0 0 32 32" aria-hidden="true">
-        <path d="M3 26A13 13 0 0 1 29 26" />
-        <path d="M9 26A7 7 0 0 1 23 26" />
-        <path d="M16 26L7 15" className="beam" />
-        <circle cx="16" cy="26" r="2.4" />
-      </svg>
-      <span>
-        Scout <em>Radar</em>
-      </span>
+      <img
+        className="scout-logo"
+        src={scoutLogo}
+        alt="Scout Radar"
+        width="820"
+        height="296"
+      />
     </div>
   );
 }

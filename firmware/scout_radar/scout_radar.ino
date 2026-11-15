@@ -1,6 +1,6 @@
 /* Scout Radar / Arduino UNO R3
  * Serial: 115200, newline-delimited JSON output.
- * Commands: SCAN, AIM <0..180>, STATUS <PASS|WARN|FAIL>, STOP, PING
+ * Commands: SCAN, AIM <0..180>, STATUS <PASS|WARN|FAIL>, STOP, PING, IMU
  * Dependencies: Arduino AVR core (Wire) and Servo library.
  * 15 pings x 37 angles at 60 ms spacing takes about 40 seconds, not 15.
  */
@@ -12,7 +12,10 @@
 
 const uint8_t SERVO_PIN=9, TRIG_PIN=10, ECHO_PIN=11;
 const uint8_t RED_PIN=5, GREEN_PIN=6, BUZZER_PIN=7, BUTTON_PIN=2;
-const uint8_t IMU_ADDRESS=0x68;
+uint8_t imuAddress=0x68;
+bool imuAvailable=false;
+uint8_t imuIdentity=0;
+uint8_t imuFailure=0; // 1=not detected, 2=I2C read, 3=invalid acceleration
 const unsigned long PING_SPACING_MS=60;
 Servo turret;
 char command[64];
@@ -29,32 +32,56 @@ bool pauseMs(unsigned long duration){
  while(millis()-start<duration){pollCommands();if(stopRequested)return false;delay(1);}
  return true;
 }
+bool initializeIMU(){
+ // Compatible MPU accelerometer register maps: 6050, 6500, 9250 and 9255.
+ imuFailure=1;
+ for(uint8_t address=0x68;address<=0x69;address++){
+  Wire.beginTransmission(address);Wire.write(0x75);
+  if(Wire.endTransmission(false)!=0)continue;
+  if(Wire.requestFrom(address,(uint8_t)1,(uint8_t)true)!=1)continue;
+  uint8_t identity=Wire.read();imuIdentity=identity;
+  if(identity!=0x71&&identity!=0x68&&identity!=0x70&&identity!=0x73)continue;
+  imuAddress=address;
+  Wire.beginTransmission(address);Wire.write(0x6B);Wire.write(0);
+  if(Wire.endTransmission()!=0)return false;
+  Wire.beginTransmission(address);Wire.write(0x1C);Wire.write(0);
+  if(Wire.endTransmission()!=0)return false;
+  imuFailure=0;delay(100);return true;
+ }
+ return false;
+}
 bool readIMU(float &pitch,float &roll){
- Wire.beginTransmission(IMU_ADDRESS);Wire.write(0x3B);
- if(Wire.endTransmission(false)!=0)return false;
- if(Wire.requestFrom(IMU_ADDRESS,(uint8_t)6,(uint8_t)true)!=6)return false;
+ if(!imuAvailable){imuFailure=1;return false;}
+ Wire.beginTransmission(imuAddress);Wire.write(0x3B);
+ if(Wire.endTransmission(false)!=0){imuFailure=2;return false;}
+ if(Wire.requestFrom(imuAddress,(uint8_t)6,(uint8_t)true)!=6){imuFailure=2;return false;}
  int16_t ax=(Wire.read()<<8)|Wire.read();
  int16_t ay=(Wire.read()<<8)|Wire.read();
  int16_t az=(Wire.read()<<8)|Wire.read();
  float x=ax/16384.0f,y=ay/16384.0f,z=az/16384.0f;
  float norm=sqrt(x*x+y*y+z*z);
- if(norm<0.7f||norm>1.3f)return false;
+ if(norm<0.7f||norm>1.3f){imuFailure=3;return false;}
+ imuFailure=0;
  pitch=atan2(x,sqrt(y*y+z*z))*180.0f/PI;
  roll=atan2(y,sqrt(x*x+z*z))*180.0f/PI;
  return true;
 }
-bool stillness(){
+bool stillness(bool reportErrors){
  float meanP=0,meanR=0,m2P=0,m2R=0;
  for(int n=1;n<=25;n++){
-  float p,r;if(!readIMU(p,r)){error(F("IMU missing or unstable acceleration. Check wiring and keep base still."));return false;}
+  float p,r;if(!readIMU(p,r)){if(reportErrors){
+   if(imuFailure==1)error(F("IMU not detected. Check sensor identity, power, SDA/SCL and firmware support."));
+   else if(imuFailure==2)error(F("IMU I2C read failed. Check wiring and power."));
+   else error(F("IMU acceleration is outside stationary range. Keep rig still and check mounting/power."));
+  }return false;}
   float dp=p-meanP,dr=r-meanR;meanP+=dp/n;meanR+=dr/n;m2P+=dp*(p-meanP);m2R+=dr*(r-meanR);
-  if(!pauseMs(20))return false;
+  if(reportErrors){if(!pauseMs(20))return false;}else delay(20);
  }
  bool still=m2P/24<0.08f&&m2R/24<0.08f;
  Serial.print(F("{\"type\":\"tilt\",\"pitch_deg\":"));Serial.print(meanP,3);
  Serial.print(F(",\"roll_deg\":"));Serial.print(meanR,3);
  Serial.print(F(",\"still\":"));Serial.print(still?F("true"):F("false"));Serial.println(F("}"));
- if(!still)error(F("Stillness check failed. Hold the rig still and retry."));
+ if(!still&&reportErrors)error(F("Stillness check failed. Hold the rig still and retry."));
  return still;
 }
 void sortValues(float *a,uint8_t n){
@@ -89,7 +116,7 @@ void sendPoint(int angle){
 void scan(){
  scanning=true;stopRequested=false;analogWrite(RED_PIN,60);analogWrite(GREEN_PIN,70);
  Serial.println(F("{\"type\":\"started\"}"));
- if(stillness()){
+ if(stillness(true)){
   for(int angle=0;angle<=180&&!stopRequested;angle+=5){
    turret.write(angle);if(!pauseMs(angle==0?600:100))break;sendPoint(angle);
   }
@@ -101,6 +128,7 @@ void scan(){
 void execute(char *cmd){
  if(strcmp(cmd,"STOP")==0){stopRequested=true;noTone(BUZZER_PIN);return;}
  if(scanning){error(F("Device busy; only STOP is accepted during a scan."));return;}
+ if(strcmp(cmd,"IMU")==0){if(!imuAvailable)imuAvailable=initializeIMU();scanning=true;stopRequested=false;stillness(true);scanning=false;stopRequested=false;return;}
  if(strcmp(cmd,"SCAN")==0){scan();return;}
  if(strncmp(cmd,"AIM ",4)==0){
   char *end;long angle=strtol(cmd+4,&end,10);
@@ -135,8 +163,15 @@ void setup(){
  Serial.begin(115200);Wire.begin();Wire.setWireTimeout(25000,true);
  pinMode(TRIG_PIN,OUTPUT);pinMode(ECHO_PIN,INPUT);pinMode(RED_PIN,OUTPUT);pinMode(GREEN_PIN,OUTPUT);pinMode(BUZZER_PIN,OUTPUT);pinMode(BUTTON_PIN,INPUT_PULLUP);
  turret.attach(SERVO_PIN);turret.write(90);
- Wire.beginTransmission(IMU_ADDRESS);Wire.write(0x6B);Wire.write(0);Wire.endTransmission();
- Wire.beginTransmission(IMU_ADDRESS);Wire.write(0x1C);Wire.write(0);Wire.endTransmission();
+ imuAvailable=initializeIMU();
+ delay(600); // Let the servo settle before the stationary startup check.
+ bool startupStable=imuAvailable&&stillness(false);
+ Serial.print(F("{\"type\":\"imu_check\",\"available\":"));Serial.print(imuAvailable?F("true"):F("false"));
+ Serial.print(F(",\"identity\":"));Serial.print(imuIdentity);
+ Serial.print(F(",\"address\":"));Serial.print(imuAddress);
+ Serial.print(F(",\"stable\":"));Serial.print(startupStable?F("true"):F("false"));
+ Serial.println(F(",\"reference\":\"gravity_raw\",\"auto_zeroed\":false}"));
+ // Never subtract the startup surface's inclination. Backend applies saved bias once.
  Serial.println(F("{\"type\":\"ready\",\"protocol\":1}"));
 }
 void loop(){

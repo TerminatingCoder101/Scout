@@ -729,8 +729,15 @@ export default function Sponsor({
               ))}
               <h4>Site verification progress</h4>
               <p className="muted">
-                Remote evidence prioritizes checks. Local fixture demonstrations
-                do not verify conditions at the sponsor property.
+                Measurement completion does not close the whole plan action.
+                Review unmeasured items, such as curb geometry, door force, or
+                route continuity, separately.
+              </p>
+              <p className="muted">
+                A completed scan records only the selected profile’s measured
+                checks; broader plan actions still require human/site
+                verification. Remote evidence prioritizes checks. Local fixture
+                demonstrations do not verify conditions at the sponsor property.
               </p>
               {!linked.length && (
                 <p>

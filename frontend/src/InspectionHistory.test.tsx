@@ -172,3 +172,88 @@ it("records explicit human review notes without altering measured values", async
     }),
   );
 });
+
+it("promotes a reviewed inspection into a reference only after confirmation", async () => {
+  vi.mocked(api).mockImplementation(
+    async (path) =>
+      (path === "/scans"
+        ? []
+        : [{ ...record, review_status: "reviewed" }]) as never,
+  );
+  vi.mocked(post).mockResolvedValue({ id: "baseline-one" });
+  const saved = vi.fn();
+  render(<InspectionHistory onBaselineSaved={saved} />);
+  await userEvent.click(await screen.findByText("Expand inspection details"));
+  await userEvent.click(
+    screen.getByText("Create site baseline from this reviewed inspection"),
+  );
+  await userEvent.type(
+    screen.getByLabelText("Reference verification notes"),
+    "Checked with tape.",
+  );
+  await userEvent.click(
+    screen.getByRole("checkbox", { name: /I verified these measurements/ }),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Create site baseline" }),
+  );
+  await waitFor(() =>
+    expect(post).toHaveBeenCalledWith(
+      "/inspections/one/baseline",
+      expect.objectContaining({ confirmed: true, notes: "Checked with tape." }),
+    ),
+  );
+  expect(saved).toHaveBeenCalled();
+});
+
+it("opens and focuses the comparison panel with previous/current measurements", async () => {
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === "/scans") return [] as never;
+    if (path.startsWith("/inspections/compare"))
+      return {
+        before_timestamp: record.timestamp,
+        after_timestamp: "2026-01-02T00:00:00Z",
+        measurement_changes: [
+          {
+            key: "width",
+            before: record.measurements[0],
+            after: { ...record.measurements[0], value: 90 },
+            delta: 10,
+            combined_uncertainty: 4,
+            status: "changed",
+          },
+        ],
+        finding_changes: [
+          {
+            key: "box",
+            before: { status: "observed" },
+            after: { status: "resolved" },
+            change: "status_changed",
+          },
+        ],
+      } as never;
+    return [record] as never;
+  });
+  render(<InspectionHistory />);
+  await userEvent.click(await screen.findByText("Expand inspection details"));
+  await userEvent.click(screen.getByText("Compare latest two"));
+  const panel = await screen.findByRole("region", {
+    name: "Latest inspection comparison",
+  });
+  expect(document.activeElement).toBe(panel);
+  expect(await screen.findByText("10 ± 4 cm")).toBeTruthy();
+  expect(screen.getByText("90 ± 2 cm")).toBeTruthy();
+  expect(screen.getByText("Change exceeds uncertainty")).toBeTruthy();
+  expect(
+    vi
+      .mocked(api)
+      .mock.calls.some(
+        ([p]) =>
+          p === "/inspections/compare?building_id=building&location_id=door",
+      ),
+  ).toBe(true);
+  await userEvent.click(screen.getByText("Close comparison"));
+  expect(
+    screen.queryByRole("region", { name: "Latest inspection comparison" }),
+  ).toBeNull();
+});

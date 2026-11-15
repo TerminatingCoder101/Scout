@@ -1,3 +1,4 @@
+import scoutLogo from "./assets/scout-logo.svg";
 import {
   useState,
   useEffect,
@@ -41,7 +42,6 @@ import {
   FlaskConical,
   LockKeyhole,
   Camera,
-  Briefcase,
 } from "lucide-react";
 import { api, post, patch } from "./api";
 import Radar from "./Radar";
@@ -69,7 +69,7 @@ type Page =
 const pages: { id: Page; label: string; icon: typeof RadarIcon }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "sponsor", label: "Property intelligence", icon: MapPin },
-  { id: "twins", label: "Digital twins", icon: Layers3 },
+  { id: "twins", label: "Site baselines", icon: Layers3 },
   { id: "history", label: "Inspection History", icon: History },
   { id: "analytics", label: "Analytics", icon: Activity },
   { id: "orders", label: "Work orders", icon: ClipboardList },
@@ -179,6 +179,8 @@ function App() {
     [scans, setScans] = useState<Scan[]>([]),
     [scan, setScan] = useState<Scan | null>(null),
     [events, setEvents] = useState<Event[]>([]);
+  const [useBaseline, setUseBaseline] = useState(true),
+    [matchedBaselines, setMatchedBaselines] = useState<Twin[]>([]);
   const [sponsorTask, setSponsorTask] = useState<{
     reviewId: string;
     actionIndex: number;
@@ -206,6 +208,36 @@ function App() {
     setToast(text);
     window.setTimeout(() => setToast(""), 4500);
   };
+  useEffect(() => {
+    if (!sponsorTask || !scanDialog) return;
+    let live = true;
+    setUseBaseline(false);
+    setMatchedBaselines([]);
+    api<Twin[]>(
+      `/sponsor/reviews/${sponsorTask.reviewId}/baselines?` +
+        new URLSearchParams({
+          location_id: inspectionLocation,
+          execution_site: executionSite,
+        }),
+    )
+      .then((found) => {
+        if (!live) return;
+        setMatchedBaselines(found);
+        setUseBaseline(found.length > 0);
+        if (found.length) {
+          setBuilding(found[0].id);
+          setTwins((old) => [
+            ...new Map([...old, ...found].map((t) => [t.id, t])).values(),
+          ]);
+        }
+      })
+      .catch((e) => {
+        if (live) setError(e.message);
+      });
+    return () => {
+      live = false;
+    };
+  }, [sponsorTask, scanDialog, inspectionLocation, executionSite]);
   async function load() {
     const [status, t, s] = await Promise.all([
       api<{
@@ -371,6 +403,7 @@ function App() {
         sponsor_action_index: sponsorTask?.actionIndex || 0,
         execution_site: executionSite,
         site_confirmed: siteConfirmed,
+        use_baseline: useBaseline,
         building_id: building,
         location_id: inspectionLocation,
         mode,
@@ -409,10 +442,13 @@ function App() {
     return (
       <main className="unlock">
         <div className="brand">
-          <RadarIcon size={35} />
-          <span>
-            scout<span className="brand-radar">RADAR</span>
-          </span>
+          <img
+            className="scout-logo"
+            src={scoutLogo}
+            alt="Scout Radar"
+            width="820"
+            height="296"
+          />
         </div>
         <div className="unlock-card">
           <LockKeyhole size={30} />
@@ -467,12 +503,13 @@ function App() {
             navigate("overview");
           }}
         >
-          <span className="brand-mark">
-            <RadarIcon size={30} />
-          </span>
-          <span>
-            scout<span className="brand-radar">RADAR</span>
-          </span>
+          <img
+            className="scout-logo"
+            src={scoutLogo}
+            alt="Scout Radar"
+            width="820"
+            height="296"
+          />
         </a>
         <div className="workspace">
           <div className="workspace-avatar">S</div>
@@ -504,10 +541,6 @@ function App() {
                 )}
             </button>
           ))}
-          <button onClick={() => location.assign("/business")}>
-            <Briefcase size={18} />
-            <span>Business</span>
-          </button>
         </nav>
         <div className="sidebar-bottom">
           <div className="connection-card">
@@ -641,9 +674,11 @@ function App() {
                   </div>
                   <div>
                     <strong>
-                      {scan?.twin.name ||
+                      {(scan?.baseline_used === false
+                        ? "Measurement-only inspection"
+                        : scan?.twin.name) ||
                         twins.find((t) => t.id === building)?.name ||
-                        "Select a digital twin"}
+                        "Select a site baseline or run measurement-only"}
                     </strong>
                     <span>
                       {scan
@@ -675,7 +710,11 @@ function App() {
                   value={num(result?.width_in)}
                   unit="in"
                   check={result?.checks.find((c) => c.key === "width")}
-                  baseline={scan?.twin.width_in ?? 36}
+                  baseline={
+                    scan?.baseline_used === false
+                      ? undefined
+                      : scan?.twin.width_in
+                  }
                 />
                 <Metric
                   title="RUNNING SLOPE"
@@ -901,7 +940,7 @@ function App() {
                     </div>
                     <button
                       className="icon-button"
-                      aria-label="View digital twins"
+                      aria-label="View site baselines"
                       onClick={() => navigate("twins")}
                     >
                       <ArrowUpRight size={18} />
@@ -913,37 +952,7 @@ function App() {
                     <span>MEASURED</span>
                     <span>DRIFT</span>
                   </div>
-                  {(
-                    result?.drift || [
-                      {
-                        key: "width",
-                        label: "Clear width",
-                        expected: 36,
-                        measured: null,
-                        delta: null,
-                        unit: "in",
-                        changed: false,
-                      },
-                      {
-                        key: "running_slope",
-                        label: "Running slope",
-                        expected: 3.5,
-                        measured: null,
-                        delta: null,
-                        unit: "deg",
-                        changed: false,
-                      },
-                      {
-                        key: "cross_slope",
-                        label: "Cross slope",
-                        expected: 0.4,
-                        measured: null,
-                        delta: null,
-                        unit: "deg",
-                        changed: false,
-                      },
-                    ]
-                  ).map((d) => (
+                  {(result?.drift || []).map((d) => (
                     <div className="comparison-row" key={d.key}>
                       <strong>{d.label}</strong>
                       <span>
@@ -961,9 +970,24 @@ function App() {
                         {d.delta !== null && (
                           <small> {d.unit === "deg" ? "°" : d.unit}</small>
                         )}
+                        {d.comparison_status && (
+                          <small>
+                            {d.combined_uncertainty == null
+                              ? " · reference uncertainty unknown"
+                              : ` · combined ±${num(d.combined_uncertainty, 2)}`}{" "}
+                            · {d.comparison_status}
+                          </small>
+                        )}
                       </span>
                     </div>
                   ))}
+                  {!result?.drift.length && (
+                    <p className="muted">
+                      No reference comparison available. Choose a site baseline
+                      to compare; measured screening and inspection history
+                      still work.
+                    </p>
+                  )}
                   <div className="panel-note">
                     <span className="status-dot" />A passing measurement can
                     still differ from the blueprint.
@@ -1043,6 +1067,13 @@ function App() {
                       {scan.sponsor_context.target_location}
                     </p>
                     <p>{scan.sponsor_context.reason}</p>
+                    <p>{scan.sponsor_context.property_address}</p>
+                    {scan.history_scope && (
+                      <p>
+                        History building: {scan.history_scope.building_id} ·
+                        Location: {scan.history_scope.location_id}
+                      </p>
+                    )}
                     <p>
                       Evidence: {scan.sponsor_context.sources.join(" + ")} ·
                       Plan: {scan.sponsor_context.plan_id}
@@ -1145,7 +1176,7 @@ function App() {
               onSave={async (t) => {
                 await post("/twins", t);
                 setTwins(await api("/twins"));
-                notify("Digital twin saved.");
+                notify("Site baseline saved.");
               }}
               onInspect={(id) => {
                 setBuilding(id);
@@ -1160,6 +1191,7 @@ function App() {
               onChange={setSettings}
               onCreateInspection={(reviewId, actionIndex, title) => {
                 setSponsorTask({ reviewId, actionIndex, title });
+                setUseBaseline(false);
                 setInspectionLocation(
                   `plan-${reviewId.slice(0, 8)}-${actionIndex + 1}`,
                 );
@@ -1181,6 +1213,12 @@ function App() {
           )}
           {page === "history" && (
             <InspectionHistory
+              onBaselineSaved={async () => {
+                setTwins(await api("/twins"));
+                notify(
+                  "Site baseline created. Matching future inspections will use it.",
+                );
+              }}
               onViewScan={(s) => {
                 selectScan(s);
                 navigate("overview");
@@ -1267,7 +1305,8 @@ function App() {
             </div>
             <h2 id="new-scan-title">Let’s read the room.</h2>
             <p>
-              Choose a baseline and inspection mode. Scout handles the rest.
+              Choose an inspection mode and optionally compare with a site
+              baseline.
             </p>
             <form
               onSubmit={(e) => {
@@ -1281,8 +1320,8 @@ function App() {
                     <strong>From sponsor plan: {sponsorTask.title}</strong>
                     <p>
                       Remote evidence guides this check. Room dimensions are not
-                      doorway clearances; choose a verified measurement baseline
-                      below.
+                      doorway clearances. A matching verified baseline is
+                      optional.
                     </p>
                     <Field label="Where is the rig?">
                       <select
@@ -1315,19 +1354,37 @@ function App() {
                   </div>
                 </section>
               )}
-              <Field label="Digital twin">
-                <select
-                  autoFocus
-                  value={building}
-                  onChange={(e) => setBuilding(e.target.value)}
-                >
-                  {twins.map((t) => (
-                    <option value={t.id} key={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <label className="checkbox-line">
+                <input
+                  type="checkbox"
+                  checked={useBaseline}
+                  disabled={!!sponsorTask && !matchedBaselines.length}
+                  onChange={(e) => setUseBaseline(e.target.checked)}
+                />
+                Compare against a site baseline (optional)
+              </label>
+              {sponsorTask && (
+                <p className="muted">
+                  {matchedBaselines.length
+                    ? "A verified baseline matching this property, model, location and fixture/site was selected."
+                    : "No matching verified baseline yet. Run a measurement-only inspection, review it in History, then create its baseline."}
+                </p>
+              )}
+              {useBaseline && (
+                <Field label="Site baseline">
+                  <select
+                    autoFocus
+                    value={building}
+                    onChange={(e) => setBuilding(e.target.value)}
+                  >
+                    {(sponsorTask ? matchedBaselines : twins).map((t) => (
+                      <option value={t.id} key={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               <Field
                 label="Location ID"
                 hint="Reuse this ID when inspecting the same doorway or ramp again. Completed inspections save to Atlas automatically."
@@ -1522,7 +1579,7 @@ function Metric({
         {check
           ? `${check.minimum !== null ? "Min " + num(check.minimum) : "Max " + num(check.maximum, 2)} ${check.unit} · ±${num(check.error, 2)}`
           : baseline
-            ? `Digital twin: ${num(baseline)} in`
+            ? `Site baseline: ${num(baseline)} in`
             : "Observed tilt · profile-dependent check"}
       </small>
     </div>
@@ -1579,9 +1636,9 @@ function Twins({
     location: "",
     source: "manual",
     source_reference: "",
-    width_in: 36,
-    running_slope_deg: 0,
-    cross_slope_deg: 0,
+    width_in: 0,
+    running_slope_deg: null,
+    cross_slope_deg: null,
     captured_at: new Date().toISOString().slice(0, 10),
   };
   async function save(e: FormEvent) {
@@ -1670,6 +1727,11 @@ function Twins({
                   <small>CLEAR WIDTH</small>
                   <strong>
                     {num(t.width_in)} <span>in</span>
+                    <small>
+                      {t.width_uncertainty_in == null
+                        ? "Uncertainty not recorded"
+                        : `± ${t.width_uncertainty_in} in`}
+                    </small>
                   </strong>
                 </div>
                 <div>
@@ -1688,6 +1750,10 @@ function Twins({
                 </div>
               </div>
               <p className="source-note">
+                {t.verified ? "Verified reference" : "Unverified reference"}
+                {t.property_id &&
+                  ` · ${t.property_id} / ${t.model_id} / ${t.location_id} · ${t.execution_site}`}
+                <br />
                 {t.source_reference || "Manual baseline"}
                 <br />
                 {t.captured_at && "Recorded " + t.captured_at}
@@ -1728,7 +1794,7 @@ function Twins({
             aria-labelledby="twin-title"
           >
             <div className="modal-heading">
-              <h2 id="twin-title">Digital twin baseline</h2>
+              <h2 id="twin-title">Site baseline</h2>
               <button
                 className="icon-button"
                 aria-label="Close baseline editor"
@@ -1779,6 +1845,7 @@ function Twins({
                       "manual",
                       "matterport_export",
                       "costar_export",
+                      "scout_inspection",
                       "demo",
                     ].map((s) => (
                       <option key={s} value={s}>
@@ -1796,7 +1863,7 @@ function Twins({
                     max="250"
                     step=".01"
                     required
-                    value={editing.width_in}
+                    value={editing.width_in || ""}
                     onChange={(e) =>
                       setEditing({
                         ...editing,
@@ -1811,11 +1878,12 @@ function Twins({
                     min="0"
                     max="45"
                     step=".01"
-                    value={editing.running_slope_deg}
+                    value={editing.running_slope_deg ?? ""}
                     onChange={(e) =>
                       setEditing({
                         ...editing,
-                        running_slope_deg: Number(e.target.value),
+                        running_slope_deg:
+                          e.target.value === "" ? null : Number(e.target.value),
                       })
                     }
                   />
@@ -1826,16 +1894,105 @@ function Twins({
                     min="0"
                     max="45"
                     step=".01"
-                    value={editing.cross_slope_deg}
+                    value={editing.cross_slope_deg ?? ""}
                     onChange={(e) =>
                       setEditing({
                         ...editing,
-                        cross_slope_deg: Number(e.target.value),
+                        cross_slope_deg:
+                          e.target.value === "" ? null : Number(e.target.value),
                       })
                     }
                   />
                 </Field>
               </div>
+              <details className="advanced">
+                <summary>Link to property and inspection location</summary>
+                <p>
+                  Fill all four scope fields together. Local fixture baselines
+                  cannot be used for property-site measurements.
+                </p>
+                {(["property_id", "model_id", "location_id"] as const).map(
+                  (k) => (
+                    <Field key={k} label={label(k)}>
+                      <input
+                        value={editing[k] || ""}
+                        onChange={(e) =>
+                          setEditing({
+                            ...editing,
+                            [k]: e.target.value || null,
+                          })
+                        }
+                      />
+                    </Field>
+                  ),
+                )}
+                <Field label="Fixture or property site">
+                  <select
+                    value={editing.execution_site || ""}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        execution_site: (e.target.value ||
+                          null) as Twin["execution_site"],
+                      })
+                    }
+                  >
+                    <option value="">Unlinked reference</option>
+                    <option value="local_fixture">Local fixture</option>
+                    <option value="property_site">Property site</option>
+                  </select>
+                </Field>
+              </details>
+              <label className="checkbox-line">
+                <input
+                  type="checkbox"
+                  checked={!!editing.verified}
+                  onChange={(e) =>
+                    setEditing({ ...editing, verified: e.target.checked })
+                  }
+                />
+                I verified these reference measurements
+              </label>
+              <div className="form-grid">
+                {(
+                  [
+                    "width_uncertainty_in",
+                    "running_slope_uncertainty_deg",
+                    "cross_slope_uncertainty_deg",
+                  ] as const
+                ).map((k) => (
+                  <Field key={k} label={label(k)}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      value={editing[k] ?? ""}
+                      onChange={(e) =>
+                        setEditing({
+                          ...editing,
+                          [k]:
+                            e.target.value === ""
+                              ? null
+                              : Number(e.target.value),
+                        })
+                      }
+                    />
+                  </Field>
+                ))}
+              </div>
+              <Field label="Verification notes">
+                <textarea
+                  value={editing.verification_notes || ""}
+                  required={editing.verified}
+                  maxLength={2000}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      verification_notes: e.target.value,
+                    })
+                  }
+                />
+              </Field>
               <Field label="Source reference">
                 <input
                   placeholder="Model ID, export filename, or measurement notes"
@@ -2070,6 +2227,16 @@ function SettingsPanel({
   notify: (s: string) => void;
   busyScan: boolean;
 }) {
+  const [cameraPreview, setCameraPreview] = useState<{
+    camera_index: number;
+    url: string;
+    captured_at: string;
+  } | null>(null);
+  useEffect(() => {
+    api<typeof cameraPreview>("/hardware/camera-preview")
+      .then(setCameraPreview)
+      .catch(() => {});
+  }, []);
   const [draft, setDraft] = useState(settings),
     [gemini, setGemini] = useState(""),
     [visionKey, setVisionKey] = useState(""),
@@ -2271,6 +2438,19 @@ function SettingsPanel({
             <Badge value={device.connected ? "connected" : "disconnected"} />
           </div>
           <div className="settings-body">
+            {device.imu_check && (
+              <p className="info-note">
+                IMU: {device.imu_check.available ? "detected" : "not detected"}{" "}
+                · Startup stillness:{" "}
+                {device.imu_check.stable ? "passed" : "not verified"}
+                {device.imu_check.identity != null
+                  ? ` · Chip ID 0x${device.imu_check.identity.toString(16)}`
+                  : ""}
+                {device.imu_check.address != null
+                  ? ` · Address 0x${device.imu_check.address.toString(16)}`
+                  : ""}
+              </p>
+            )}
             <Field label="Serial port">
               <div className="input-action">
                 <select
@@ -2317,6 +2497,51 @@ function SettingsPanel({
                 }
               />
             </Field>
+            <div className="history-filters">
+              <button
+                type="button"
+                className="secondary compact"
+                disabled={busy || busyScan}
+                onClick={() =>
+                  task(async () => {
+                    setCameraPreview(null);
+                    const frame = await post<NonNullable<typeof cameraPreview>>(
+                      "/hardware/test-camera",
+                      { camera_index: draft.camera_index },
+                    );
+                    setCameraPreview(frame);
+                    notify(
+                      `Camera ${frame.camera_index} captured a fresh frame.`,
+                    );
+                  })
+                }
+              >
+                <Camera size={15} />
+                {busy ? "Working…" : "Capture test frame"}
+              </button>
+              <small>
+                Tests the selected camera index. Save settings to use that index
+                for inspections. No AI request is made.
+              </small>
+            </div>
+            {cameraPreview && (
+              <figure style={{ margin: "16px 0" }}>
+                <img
+                  src={cameraPreview.url}
+                  alt={`Test frame from camera ${cameraPreview.camera_index}`}
+                  style={{
+                    width: "100%",
+                    maxHeight: 360,
+                    objectFit: "contain",
+                    borderRadius: 8,
+                  }}
+                />
+                <figcaption className="muted">
+                  Camera {cameraPreview.camera_index} · Captured{" "}
+                  {date(cameraPreview.captured_at)}
+                </figcaption>
+              </figure>
+            )}
             <div className="card-actions">
               <button
                 className="secondary compact"
@@ -2499,6 +2724,31 @@ function Calibration({
   onError: (s: string) => void;
   notify: (s: string) => void;
 }) {
+  const [liveTilt, setLiveTilt] = useState<{
+    pitch_deg: number;
+    roll_deg: number;
+    still: boolean;
+  } | null>(null);
+  const [relativeZero, setRelativeZero] = useState<{
+    pitch_deg: number;
+    roll_deg: number;
+  } | null>(null);
+  const [knownLevel, setKnownLevel] = useState(false);
+  async function captureIMU(position?: "forward" | "reverse") {
+    const reading = await post<{
+      pitch_deg: number;
+      roll_deg: number;
+      still: boolean;
+    }>("/calibration/read-imu");
+    setLiveTilt(reading);
+    if (position)
+      setFlip((old) => ({
+        ...old,
+        [position + "_pitch"]: String(reading.pitch_deg),
+        [position + "_roll"]: String(reading.roll_deg),
+      }));
+    return reading;
+  }
   const [data, setData] = useState<Validation | null>(null),
     [flip, setFlip] = useState({
       forward_pitch: "",
@@ -2545,6 +2795,102 @@ function Calibration({
           or claims measured accuracy before you record evidence.
         </span>
       </div>
+      <section className="panel settings-card">
+        <div className="panel-heading">
+          <div>
+            <h2>Live IMU reference</h2>
+            <p>Capture fresh stationary readings without a radar sweep.</p>
+          </div>
+        </div>
+        <div className="settings-body">
+          <div className="history-filters">
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() =>
+                task(async () => {
+                  await captureIMU();
+                })
+              }
+            >
+              Read current tilt
+            </button>
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() =>
+                task(async () => {
+                  setRelativeZero(await captureIMU());
+                })
+              }
+            >
+              Tare relative display here
+            </button>
+            {relativeZero && (
+              <button
+                className="text-button"
+                onClick={() => setRelativeZero(null)}
+              >
+                Clear relative tare
+              </button>
+            )}
+          </div>
+          {liveTilt && (
+            <p>
+              Raw pitch {num(liveTilt.pitch_deg, 3)}° · Roll{" "}
+              {num(liveTilt.roll_deg, 3)}°<br />
+              Gravity-referenced, bias corrected: pitch{" "}
+              {num(liveTilt.pitch_deg - settings.pitch_bias_deg, 3)}° · Roll{" "}
+              {num(liveTilt.roll_deg - settings.roll_bias_deg, 3)}°
+            </p>
+          )}
+          {liveTilt && relativeZero && (
+            <p>
+              Relative display: pitch{" "}
+              {num(liveTilt.pitch_deg - relativeZero.pitch_deg, 3)}° · Roll{" "}
+              {num(liveTilt.roll_deg - relativeZero.roll_deg, 3)}°
+            </p>
+          )}
+          <p className="muted">
+            Relative tare changes this display only. Press Read current tilt
+            after moving the rig to compare. It never zeros inspection slopes.
+            Firmware must support the IMU command.
+          </p>
+          <label className="checkbox-line">
+            <input
+              type="checkbox"
+              checked={knownLevel}
+              onChange={(e) => setKnownLevel(e.target.checked)}
+            />
+            The rig is on an independently checked level surface.
+          </label>
+          <button
+            className="secondary"
+            disabled={busy || !knownLevel}
+            onClick={() =>
+              task(async () => {
+                const result = await post<{
+                  reading: {
+                    pitch_deg: number;
+                    roll_deg: number;
+                    still: boolean;
+                  };
+                  settings: Settings;
+                }>("/calibration/level", { confirmed_level: true });
+                onChange(result.settings);
+                setLiveTilt(result.reading);
+                setKnownLevel(false);
+                setOffsets((o) => ({ ...o, calibration_verified: false }));
+                notify(
+                  "Level reference saved. Validate error bounds before marking calibration verified.",
+                );
+              })
+            }
+          >
+            Save known-level zero
+          </button>
+        </div>
+      </section>
       <div className="calibration-grid">
         <section className="panel settings-card">
           <div className="panel-heading">
@@ -2559,6 +2905,30 @@ function Calibration({
               Record signed pitch and roll, rotate the base 180° on the same
               plane, and record again. Bias = (forward + reverse) / 2.
             </p>
+            <div className="history-filters">
+              <button
+                className="secondary compact"
+                disabled={busy}
+                onClick={() =>
+                  task(async () => {
+                    await captureIMU("forward");
+                  })
+                }
+              >
+                Capture forward position
+              </button>
+              <button
+                className="secondary compact"
+                disabled={busy}
+                onClick={() =>
+                  task(async () => {
+                    await captureIMU("reverse");
+                  })
+                }
+              >
+                Capture reversed position
+              </button>
+            </div>
             <form
               onSubmit={(e) => {
                 e.preventDefault();

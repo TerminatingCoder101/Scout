@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api, post, patch } from "./api";
 import Radar from "./Radar";
-import type { Scan, Point, SponsorContext } from "./types";
+import type { Scan, Point, SponsorContext, Twin } from "./types";
 
 type Measurement = {
   key: string;
@@ -16,6 +16,8 @@ type Finding = {
   detail: string;
 };
 type Record = {
+  baseline_used?: boolean;
+  baseline_snapshot?: Twin | null;
   sponsor_context?: SponsorContext | null;
   scan_id?: string;
   raw_sensor_measurements?: Point[];
@@ -304,12 +306,91 @@ function ReviewInspection({
   );
 }
 
+function CreateBaseline({
+  record,
+  onSaved,
+}: {
+  record: Record;
+  onSaved?: () => void;
+}) {
+  const [name, setName] = useState(`${record.location_id} reference`),
+    [notes, setNotes] = useState("");
+  const [confirmed, setConfirmed] = useState(false),
+    [message, setMessage] = useState(""),
+    [busy, setBusy] = useState(false);
+  return (
+    <details className="advanced">
+      <summary>Create site baseline from this reviewed inspection</summary>
+      <p>
+        For hardware, use physically verified reference measurements. Demo data
+        remains a local-fixture baseline. Unknown slopes stay unmeasured.
+      </p>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          try {
+            await post(`/inspections/${record.id}/baseline`, {
+              name,
+              notes,
+              confirmed,
+            });
+            setMessage(
+              "Site baseline saved. It will be suggested for matching future inspections.",
+            );
+            onSaved?.();
+          } catch (e) {
+            setMessage((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label>
+          Baseline name
+          <input
+            required
+            maxLength={120}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+        <label>
+          Reference verification notes
+          <textarea
+            required
+            maxLength={2000}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            required
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+          />
+          I verified these measurements are suitable as a reference for this
+          location.
+        </label>
+        <button className="secondary" disabled={busy}>
+          Create site baseline
+        </button>
+        {message && <p role="status">{message}</p>}
+      </form>
+    </details>
+  );
+}
+
 export default function InspectionHistory({
   analytics = false,
   onViewScan,
+  onBaselineSaved,
 }: {
   analytics?: boolean;
   onViewScan?: (scan: Scan) => void;
+  onBaselineSaved?: () => void;
 }) {
   const [building, setBuilding] = useState(""),
     [location, setLocation] = useState("");
@@ -317,6 +398,7 @@ export default function InspectionHistory({
   const [localScans, setLocalScans] = useState<Scan[]>([]);
   const [records, setRecords] = useState<Record[]>([]),
     [summary, setSummary] = useState<Analytics | null>(null);
+  const comparisonPanel = useRef<HTMLElement>(null);
   const [comparison, setComparison] = useState<Comparison | null>(null),
     [compareError, setCompareError] = useState("");
   const [selected, setSelected] = useState<{
@@ -428,6 +510,14 @@ export default function InspectionHistory({
       clearInterval(timer);
     };
   }, [selected, analytics, refresh]);
+  useEffect(() => {
+    if (!selected || analytics) return;
+    comparisonPanel.current?.scrollIntoView?.({
+      behavior: "smooth",
+      block: "start",
+    });
+    comparisonPanel.current?.focus({ preventScroll: true });
+  }, [selected, analytics]);
   const linked = new Set(records.map((r) => r.scan_id).filter(Boolean));
   const localRecords: Record[] =
     offset === 0
@@ -436,17 +526,23 @@ export default function InspectionHistory({
             (s) =>
               !linked.has(s.id) &&
               (!s.atlas_inspection_id || !!error) &&
-              (!building.trim() || s.request.building_id === building.trim()) &&
+              (!building.trim() ||
+                (s.history_scope?.building_id || s.request.building_id) ===
+                  building.trim()) &&
               (!location.trim() ||
-                (s.request.location_id || s.request.profile) ===
-                  location.trim()),
+                (s.history_scope?.location_id ||
+                  s.request.location_id ||
+                  s.request.profile) === location.trim()),
           )
           .map((s) => ({
             id: "local-" + s.id,
             sponsor_context: s.sponsor_context,
             local: s,
-            building_id: s.request.building_id,
-            location_id: s.request.location_id || s.request.profile,
+            building_id: s.history_scope?.building_id || s.request.building_id,
+            location_id:
+              s.history_scope?.location_id ||
+              s.request.location_id ||
+              s.request.profile,
             timestamp: s.completed_at || s.created_at,
             source_mode: s.request.mode as "demo" | "hardware",
             review_status: s.status + " · local only",
@@ -612,12 +708,15 @@ export default function InspectionHistory({
                   {!r.id.startsWith("local-") && (
                     <button
                       className="secondary compact"
-                      onClick={() =>
+                      aria-controls="inspection-comparison"
+                      onClick={() => {
+                        setComparison(null);
+                        setCompareError("");
                         setSelected({
                           building: r.building_id,
                           location: r.location_id,
-                        })
-                      }
+                        });
+                      }}
                     >
                       Compare latest two
                     </button>
@@ -654,6 +753,33 @@ export default function InspectionHistory({
                     </div>
                   </div>
                 )}
+                {r.sponsor_context?.evidence_provenance && (
+                  <details className="advanced">
+                    <summary>Evidence provenance snapshot</summary>
+                    <pre
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {JSON.stringify(
+                        r.sponsor_context.evidence_provenance,
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </details>
+                )}
+                {r.baseline_snapshot && (
+                  <p className="info-note">
+                    Reference: {r.baseline_snapshot.name} · Width{" "}
+                    {r.baseline_snapshot.width_in}{" "}
+                    {r.baseline_snapshot.width_uncertainty_in != null
+                      ? `± ${r.baseline_snapshot.width_uncertainty_in}`
+                      : "(reference uncertainty not recorded)"}{" "}
+                    in · Source: {r.baseline_snapshot.source_reference}
+                  </p>
+                )}
                 <h3>Measurements</h3>
                 {r.measurements.length ? (
                   <ul>
@@ -682,6 +808,10 @@ export default function InspectionHistory({
                 ) : (
                   <p>No findings recorded. This does not establish a pass.</p>
                 )}
+                {!r.id.startsWith("local-") &&
+                  r.review_status === "reviewed" && (
+                    <CreateBaseline record={r} onSaved={onBaselineSaved} />
+                  )}
                 {!r.id.startsWith("local-") && (
                   <ReviewInspection
                     key={r.id + r.review_status}
@@ -735,11 +865,25 @@ export default function InspectionHistory({
             </button>
           </div>
           {selected && (
-            <section className="panel settings-card">
+            <section
+              ref={comparisonPanel}
+              id="inspection-comparison"
+              role="region"
+              aria-label="Latest inspection comparison"
+              tabIndex={-1}
+              className="panel settings-card"
+              style={{ scrollMarginTop: "24px" }}
+            >
               <div className="panel-heading">
                 <h2>
                   Latest comparison: {selected.building} / {selected.location}
                 </h2>
+                <button
+                  className="secondary compact"
+                  onClick={() => setSelected(null)}
+                >
+                  Close comparison
+                </button>
               </div>
               <div className="settings-body">
                 {compareError && <p role="status">{compareError}</p>}

@@ -109,3 +109,54 @@ Use an authorized twin JSON import when comparing an actual building. Place a re
 - **Erratic distances:** reduce vibration, check stable servo power, align with the actual jambs, and inspect surfaces with poor acoustic reflection. Do not reduce error bounds to force PASS.
 - **Camera error:** select the USB camera index and grant camera permission to the host application. Close apps exclusively using that webcam.
 - **AI unavailable:** check the saved key, model access, quota/billing, and network. Measurements already obtained remain in the scan. Google failure is shown, never silently replaced with a fake live diagnosis.
+
+## IMU calibration and tare
+
+Upload `firmware/scout_radar/scout_radar.ino` to use the new dashboard capture
+controls. It detects MPU-9250 (WHO_AM_I 0x71) or MPU-6050 (0x68), at I2C address
+0x68 or 0x69. Boot initializes the accelerometer and performs a stationary check.
+It reports `imu_check` and raw gravity-referenced tilt; it never automatically
+subtracts the unknown startup surface's slope. An IMU-only `IMU` command captures
+25 samples without a radar sweep. Moving, invalid or missing sensor data is rejected.
+
+In **Calibration lab**, connect the Arduino through Settings first, then:
+
+- Use **Read current tilt** for raw signed and saved-bias-corrected values.
+- On an independently checked level reference, confirm the level checkbox and
+  use **Save known-level zero**. This saves pitch/roll bias in local settings.
+- Alternatively use **Capture forward position**, turn the whole base 180 degrees
+  on the same plane without changing the IMU mounting, and use **Capture reversed
+  position**. Then **Calculate & save bias**. Do not turn only the servo turret.
+- Validate error bounds against physical reference measurements before checking
+  calibration verified. Saving a new bias clears that verification flag.
+- **Tare relative display here** establishes only a temporary display reference.
+  Move the rig and press Read current tilt again to see changes relative to that
+  surface. It does not change stored calibration or inspection slope measurements.
+
+Do not zero inspection slopes on an unknown ramp or floor. That would hide the
+inclination being measured. Bias is corrected once in Python; firmware remains raw.
+A startup stillness check is not a full accelerometer scale/alignment calibration.
+The IMU must remain rigidly mounted, and a remount requires rechecking calibration.
+
+Firmware validation: compiled for `arduino:avr:uno` with Arduino AVR core 1.8.6
+and the official Servo library 1.3.0. If Arduino IDE reports Servo.h missing,
+install **Servo** through Library Manager. Compilation does not establish physical
+sensor accuracy; verify the assembled rig after upload.
+
+Compatible variants also include MPU-6500 (WHO_AM_I 0x70) and MPU-9255 (0x73).
+The connected rig was verified to report 0x70 at I2C address 0x68. Do not reject
+that sensor merely because the breakout was sold/labeled as MPU-9250. Firmware
+reports identity/address/stability at boot; Settings displays that diagnostic.
+IMU read errors distinguish missing identity, I2C failures and nonstationary
+acceleration. Device failures inside AI tool calls are reported as hardware
+errors rather than being mislabeled as Google service failures.
+
+## Camera check
+
+In Settings → Arduino & camera, select Camera index and click Capture test frame.
+Scout captures a fresh local JPEG and displays it with the camera index and capture
+time. It tests the selected draft index without saving settings; save changes to
+use that index for inspections. No Google/AI request is made by the camera test.
+Testing is blocked while an inspection is active. The last successful preview can
+be restored after reopening Settings. Camera startup tolerates transient empty
+frames and releases the device after capture, including failed attempts.

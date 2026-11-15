@@ -204,6 +204,8 @@ class Inspection:
                 else "Review flagged dimensions and complete corrective work before reinspection."
             ),
             actions=actions,
+            sponsor_context=self.doc.get("sponsor_context"),
+            history_scope=self.doc.get("history_scope"),
             cost_note="Illustrative planning ranges in USD, not contractor quotes. Overlapping items are not additive. Site conditions, labor, permits, and structural work can change costs.",
         )
         await self.device.verdict(r["verdict"])
@@ -291,6 +293,14 @@ class ScanManager:
             if not twin:
                 raise KeyError("Digital twin not found.")
             sponsor_context = sponsor.inspection_context(request)
+            if sponsor_context and request.use_baseline:
+                matches = sponsor.matching_baselines(
+                    sponsor_context, request.location_id or request.profile
+                )
+                if not any(t["id"] == twin["id"] for t in matches):
+                    raise ValueError(
+                        "Choose a verified baseline for this property/model/location, or disable baseline comparison."
+                    )
             settings = config.public()
             if request.use_ai and not settings["gemini_api_key_configured"]:
                 raise ValueError("Add a Gemini API key in Settings before enabling AI.")
@@ -302,10 +312,12 @@ class ScanManager:
                 status="queued",
                 request=request.model_dump(),
                 twin=twin,
+                baseline_used=request.use_baseline,
                 settings_snapshot=settings,
                 points=[],
                 images=[],
                 sponsor_context=sponsor_context,
+                history_scope=sponsor.history_scope(request, sponsor_context),
                 agent_provider="deepagents" if request.use_ai else "deterministic",
             )
             db.save_scan(doc)
@@ -340,6 +352,18 @@ class ScanManager:
                 try:
                     await run_deep_agent(ctx)
                 except asyncio.CancelledError:
+                    raise
+                except DeviceError as exc:
+                    # Device acquisition/capture errors are not Google failures.
+                    doc["device_error"] = str(exc)
+                    await ctx.emit(
+                        "notice",
+                        {
+                            "message": str(exc),
+                            "error_type": "DeviceError",
+                            "stage": "hardware",
+                        },
+                    )
                     raise
                 except Exception as exc:
                     # Never expose provider exceptions (may include credentials or request payloads).

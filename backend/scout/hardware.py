@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import time
+import threading
 from .models import Point
 
 
@@ -21,6 +22,7 @@ class SerialDevice:
         self.button_task = None
         self.command_lock = asyncio.Lock()
         self.last_error = None
+        self.imu_check = None
 
     async def connect(self, port):
         if (
@@ -70,7 +72,20 @@ class SerialDevice:
                         continue
                 except (ValueError, UnicodeDecodeError):
                     continue
-                if event.get("type") == "button":
+                if event.get("type") == "imu_check":
+                    self.imu_check = {
+                        "available": event.get("available") is True,
+                        "stable": event.get("stable") is True,
+                    }
+                    for field, maximum in (("identity", 255), ("address", 127)):
+                        value = event.get(field)
+                        if (
+                            isinstance(value, int)
+                            and not isinstance(value, bool)
+                            and 0 <= value <= maximum
+                        ):
+                            self.imu_check[field] = value
+                elif event.get("type") == "button":
                     if self.button_callback and (
                         self.button_task is None or self.button_task.done()
                     ):
@@ -96,6 +111,7 @@ class SerialDevice:
             await asyncio.to_thread(self.serial.close)
         self.serial = None
         self.port = None
+        self.imu_check = None
         self.drain()
 
     def drain(self):
@@ -118,6 +134,33 @@ class SerialDevice:
         if event.get("type") == "error":
             raise DeviceError(str(event.get("message", "Device error"))[:200])
         return event
+
+    async def sample_tilt(self):
+        """Fresh stationary raw tilt only; never move the servo or change zero."""
+        async with self.command_lock:
+            self.drain()
+            await self.send("IMU")
+            for _ in range(5):
+                event = await self.next(timeout=3)
+                if event.get("type") != "tilt":
+                    continue
+                values = [event.get("pitch_deg"), event.get("roll_deg")]
+                if any(
+                    isinstance(v, bool)
+                    or not isinstance(v, (int, float))
+                    or not math.isfinite(v)
+                    or abs(v) > 90
+                    for v in values
+                ):
+                    raise DeviceError(
+                        "Invalid IMU reading. Update the firmware and retry."
+                    )
+                if event.get("still") is not True:
+                    raise DeviceError(
+                        "Rig moved during capture. Keep it still and retry."
+                    )
+                return dict(pitch_deg=values[0], roll_deg=values[1], still=True)
+            raise DeviceError("No fresh IMU reading. Flash the updated Scout sketch.")
 
     async def sweep(self, emit):
         async with self.command_lock:
@@ -201,6 +244,7 @@ class SerialDevice:
             ),
             port=self.port,
             error=self.last_error,
+            imu_check=self.imu_check,
         )
 
 
@@ -272,26 +316,55 @@ class Simulator:
         im.save(path, "JPEG", quality=90)
 
 
+_camera_lock = threading.Lock()
+
+
 def capture_camera(index, path):
+    # Serialize opens, including worker threads left finishing after cancellation.
+    with _camera_lock:
+        _capture_camera(index, path)
+
+
+def _capture_camera(index, path):
     import cv2
 
-    cap = cv2.VideoCapture(index)
-    try:
-        if not cap.isOpened():
-            raise DeviceError(
-                "Camera unavailable. Check the index and camera permission."
-            )
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        frame = None
-        for _ in range(6):
-            ok, frame = cap.read()
-            if not ok:
-                raise DeviceError("Camera did not return a frame.")
-        if not cv2.imwrite(str(path), frame):
-            raise DeviceError("Unable to save camera frame.")
-    finally:
-        cap.release()
+    # Keep the camera's native format: changing resolution restarts some USB
+    # streams. A transient empty frame during AVFoundation startup is normal.
+    opened = False
+    for attempt in range(2):
+        cap = cv2.VideoCapture(index)
+        try:
+            if cap.isOpened():
+                opened = True
+                deadline = time.monotonic() + 8
+                frame = None
+                good_frames = 0
+                while time.monotonic() < deadline:
+                    ok, candidate = cap.read()
+                    if ok and candidate is not None and candidate.size:
+                        frame = candidate
+                        good_frames += 1
+                        if good_frames >= 3:
+                            break
+                    else:
+                        time.sleep(0.1)
+                if frame is not None:
+                    if not cv2.imwrite(str(path), frame):
+                        raise DeviceError(
+                            "Unable to save camera frame. Check local disk space and permissions."
+                        )
+                    return
+        finally:
+            cap.release()
+        if attempt == 0:
+            time.sleep(0.5)
+    if not opened:
+        raise DeviceError(
+            f"Camera {index} could not open. Check the camera index in Settings, close other camera apps, and allow camera access for the app running Scout in macOS System Settings > Privacy & Security > Camera."
+        )
+    raise DeviceError(
+        f"Camera {index} opened but did not deliver a frame after retrying. Close other camera apps, reconnect the webcam, then use Test camera in Settings."
+    )
 
 
 def ports():

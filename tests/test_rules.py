@@ -118,3 +118,23 @@ def test_positive_and_negative_slope_equal():
         result(37, "ramp", pitch=-3.5, roll=-2.1)["verdict"]
         == result(37, "ramp", pitch=3.5, roll=2.1)["verdict"]
     )
+
+
+def test_no_baseline_disables_drift_without_changing_deterministic_checks():
+    from scout.models import ScanRequest
+    from scout import rules
+    from scout.config import config
+
+    points = [
+        dict(angle_deg=a, distance_cm=45, spread_cm=0, valid_pings=15)
+        for a in range(0, 181, 5)
+    ]
+    twin = dict(width_in=36, running_slope_deg=0, cross_slope_deg=0)
+    tilt = dict(pitch_deg=0, roll_deg=0, still=True)
+    before = rules.evaluate(points, tilt, ScanRequest(), config.public(), twin)
+    after = rules.evaluate(
+        points, tilt, ScanRequest(use_baseline=False), config.public(), twin
+    )
+    assert after["drift"] == []
+    assert after["checks"] == before["checks"]
+    assert after["verdict"] == before["verdict"]

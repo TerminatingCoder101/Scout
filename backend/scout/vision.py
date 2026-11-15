@@ -120,7 +120,7 @@ async def test_credentials(settings):
             )
         return dict(
             ok=True,
-            message="Gemini generation verified. Vision runs when an inspection captures a frame.",
+            message="Google text generation verified. This does not test the Arduino, IMU, camera, or the complete inspection agent.",
         )
     except Exception as exc:
         return dict(
