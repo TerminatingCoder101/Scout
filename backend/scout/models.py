@@ -20,7 +20,26 @@ class Twin(StrictModel):
     captured_at: str = Field(default="", max_length=50)
 
 
+class SponsorContext(StrictModel):
+    review_id: str
+    plan_id: str
+    action_index: int = Field(ge=0)
+    property_id: str
+    property_name: str
+    model_id: str
+    target_location: str
+    title: str
+    reason: str
+    next_action: str
+    sources: list[Literal["costar", "matterport", "vexcel"]]
+    execution_site: Literal["local_fixture", "property_site"]
+
+
 class ScanRequest(StrictModel):
+    sponsor_review_id: str | None = Field(default=None, max_length=80)
+    sponsor_action_index: int = Field(default=0, ge=0, le=7)
+    execution_site: Literal["local_fixture", "property_site"] = "local_fixture"
+    site_confirmed: bool = False
     building_id: str = "princeton-demo"
     location_id: str | None = Field(
         default=None, min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$"
@@ -114,6 +133,7 @@ class InspectionTilt(StrictModel):
 
 
 class InspectionCreate(StrictModel):
+    sponsor_context: SponsorContext | None = None
     scan_id: str | None = Field(default=None, max_length=80)
     source_mode: Literal["demo", "hardware"] | None = None
     building_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$")
@@ -147,4 +167,15 @@ class InspectionCreate(StrictModel):
             raise ValueError(
                 "Photo references must be nonempty and at most 500 characters"
             )
+        return self
+
+
+class InspectionReview(StrictModel):
+    findings: list[InspectionFinding] = Field(max_length=100)
+    notes: str = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def unique_keys(self):
+        if len({f.key for f in self.findings}) != len(self.findings):
+            raise ValueError("Finding keys must be unique")
         return self

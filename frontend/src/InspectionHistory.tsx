@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { api, post } from "./api";
+import { api, post, patch } from "./api";
 import Radar from "./Radar";
-import type { Scan, Point } from "./types";
+import type { Scan, Point, SponsorContext } from "./types";
 
 type Measurement = {
   key: string;
@@ -16,6 +16,7 @@ type Finding = {
   detail: string;
 };
 type Record = {
+  sponsor_context?: SponsorContext | null;
   scan_id?: string;
   raw_sensor_measurements?: Point[];
   photo_references?: string[];
@@ -220,6 +221,89 @@ export function ActivityChart({
   );
 }
 
+function ReviewInspection({
+  record,
+  onSaved,
+}: {
+  record: Record;
+  onSaved: () => void;
+}) {
+  const [findings, setFindings] = useState(record.findings),
+    [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  return (
+    <details className="advanced">
+      <summary>Human review / record a verified resolution</summary>
+      <p>
+        Review the physical evidence before marking a finding resolved. This
+        records your review, not certified compliance. Original measurements
+        remain unchanged.
+      </p>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          setError("");
+          try {
+            await patch(`/inspections/${record.id}/review`, {
+              findings,
+              notes,
+            });
+            onSaved();
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {findings.map((f, i) => (
+          <label key={f.key}>
+            {f.key}
+            <select
+              aria-label={`Review ${f.key}`}
+              value={f.status}
+              onChange={(e) =>
+                setFindings((old) =>
+                  old.map((v, j) =>
+                    j === i ? { ...v, status: e.target.value } : v,
+                  ),
+                )
+              }
+            >
+              {[
+                "observed",
+                "passed",
+                "resolved",
+                "inconclusive",
+                "recheck",
+              ].map((s) => (
+                <option key={s} value={s}>
+                  {status(s)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+        <label>
+          Review evidence and notes
+          <textarea
+            value={notes}
+            required
+            maxLength={2000}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </label>
+        <button className="secondary" disabled={busy}>
+          Save human review
+        </button>
+        {error && <p role="alert">{error}</p>}
+      </form>
+    </details>
+  );
+}
+
 export default function InspectionHistory({
   analytics = false,
   onViewScan,
@@ -359,6 +443,7 @@ export default function InspectionHistory({
           )
           .map((s) => ({
             id: "local-" + s.id,
+            sponsor_context: s.sponsor_context,
             local: s,
             building_id: s.request.building_id,
             location_id: s.request.location_id || s.request.profile,
@@ -549,6 +634,26 @@ export default function InspectionHistory({
                 {r.raw_sensor_measurements?.length ? (
                   <Radar points={r.raw_sensor_measurements} active={false} />
                 ) : null}
+                {r.sponsor_context && (
+                  <div className="info-note">
+                    <div>
+                      <strong>{r.sponsor_context.title}</strong>
+                      <p>
+                        {r.sponsor_context.property_name} ·{" "}
+                        {r.sponsor_context.target_location}
+                      </p>
+                      <p>
+                        Plan {r.sponsor_context.plan_id} · Sources:{" "}
+                        {r.sponsor_context.sources.join(" + ")}
+                      </p>
+                      <p>
+                        {r.sponsor_context.execution_site === "local_fixture"
+                          ? "Local fixture demonstration; not measurements of the sponsor property."
+                          : "Property site confirmed by operator."}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <h3>Measurements</h3>
                 {r.measurements.length ? (
                   <ul>
@@ -576,6 +681,13 @@ export default function InspectionHistory({
                   </ul>
                 ) : (
                   <p>No findings recorded. This does not establish a pass.</p>
+                )}
+                {!r.id.startsWith("local-") && (
+                  <ReviewInspection
+                    key={r.id + r.review_status}
+                    record={r}
+                    onSaved={() => setRefresh((v) => v + 1)}
+                  />
                 )}
                 {!!r.photo_references?.length && (
                   <div className="history-photos">

@@ -1,0 +1,17 @@
+Scout turns property intelligence into a physical inspection task, then keeps the evidence needed to check what changed. Our user is a facilities manager deciding where to inspect first and what needs a follow-up visit.
+
+We start in Property intelligence. This is a real imported CoStar property linked to a Matterport space. CoStar identifies the property and its context. Matterport contributes interior geometry and visual evidence. When available, Vexcel adds the exterior approach. We check the model and address match before planning, because a model may cover only one unit, and aerial imagery may include neighboring buildings.
+
+The LangChain DeepAgent reads the property context, examines interior geometry, and uses Gemini to inspect available images. Its tools publish a prioritized plan with evidence references and limitations. It must use at least two retrieved layers. Room dimensions never substitute for doorway clearance, and aerial pixels never determine a measured slope.
+
+Here is the connection to Scout's rig. Each plan action can now create a site inspection. The task carries its property, Matterport model, plan, target location, and sources into the inspection. A property-site inspection requires hardware mode and confirmation that the rig is physically there.
+
+For this demonstration we select a local fixture. These simulated measurements are not measurements of the remote sponsor property. We choose the doorway profile, a reference baseline, and a stable location identifier. We run the obstructed simulation first. Scout sweeps the sensor angles, plots distance readings, and evaluates the measured opening with deterministic rules. The agent cannot invent regulatory thresholds or override the verdict.
+
+The completed inspection is saved automatically into MongoDB Atlas. We repeat the clear simulation using the same location and plan action. This lets us demonstrate the complete workflow without claiming that our local rig visited a remote building.
+
+Inspection History now shows expandable records with the sensor graph, uncertainty, findings, photos, and sponsor provenance. Compare latest two shows the previous and current measurements and their difference. A change is distinguishable only when it exceeds the combined uncertainty. Missing or overlapping evidence requires a recheck.
+
+The plan also shows its linked inspection progress. A facilities manager can follow an action from remote evidence to a recorded site check. Human review is explicit: resolving a finding requires evidence and notes. A passing simulation is not a verified property repair.
+
+Analytics includes historical completed scans imported without duplicates. It summarizes inspection activity, current open findings, and explicitly reviewed resolutions. The result is a practical cycle: use the sponsor layers to prioritize, use Scout to collect physical evidence, and use history to guide the next visit. Scout supports accessibility screening and maintenance decisions. It does not provide certified ADA compliance.

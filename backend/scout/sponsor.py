@@ -560,3 +560,62 @@ async def close():
             task.cancel()
     await asyncio.gather(*JOBS.values(), return_exceptions=True)
     JOBS.clear()
+
+
+def inspection_context(request):
+    """Bind a physical task to server-owned evidence; never trust client-supplied source claims."""
+    if not request.sponsor_review_id:
+        return None
+    doc = review(request.sponsor_review_id)
+    plan = doc.get("plan")
+    if not plan or not doc.get("location_confirmed"):
+        raise ValueError(
+            "Publish an evidence-backed plan and confirm the property/model match first."
+        )
+    if request.sponsor_action_index >= len(plan["actions"]):
+        raise ValueError("Selected inspection action does not exist.")
+    if request.execution_site == "property_site" and (
+        request.mode != "hardware" or not request.site_confirmed
+    ):
+        raise ValueError(
+            "Property-site measurements require hardware mode and confirmation that the rig is at this property."
+        )
+    action = plan["actions"][request.sponsor_action_index]
+    return dict(
+        review_id=doc["id"],
+        plan_id=plan["id"],
+        action_index=request.sponsor_action_index,
+        property_id=doc["property"]["id"],
+        property_name=doc["property"]["name"],
+        model_id=doc["model_id"],
+        target_location=action["location"],
+        title=action["title"],
+        reason=action["reason"],
+        next_action=action["next_action"],
+        sources=action["sources"],
+        execution_site=request.execution_site,
+    )
+
+
+@router.get("/reviews/{id}/inspections")
+def linked_inspections(id: str):
+    review(id)
+    with db.connection() as c:
+        docs = [
+            json.loads(row[0])
+            for row in c.execute("SELECT document FROM scans ORDER BY created_at DESC")
+        ]
+    return [
+        dict(
+            id=d["id"],
+            status=d["status"],
+            timestamp=d["created_at"],
+            location_id=d["request"].get("location_id"),
+            mode=d["request"]["mode"],
+            atlas_status=d.get("atlas_status"),
+            verdict=(d.get("result") or {}).get("verdict"),
+            context=d["sponsor_context"],
+        )
+        for d in docs
+        if (d.get("sponsor_context") or {}).get("review_id") == id
+    ]

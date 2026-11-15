@@ -179,6 +179,13 @@ function App() {
     [scans, setScans] = useState<Scan[]>([]),
     [scan, setScan] = useState<Scan | null>(null),
     [events, setEvents] = useState<Event[]>([]);
+  const [sponsorTask, setSponsorTask] = useState<{
+    reviewId: string;
+    actionIndex: number;
+    title: string;
+  } | null>(null);
+  const [executionSite, setExecutionSite] = useState("local_fixture"),
+    [siteConfirmed, setSiteConfirmed] = useState(false);
   const [inspectionLocation, setInspectionLocation] = useState("entrance-door");
   const [building, setBuilding] = useState("princeton-demo"),
     [mode, setMode] = useState("demo"),
@@ -360,6 +367,10 @@ function App() {
   async function start() {
     await action(async () => {
       const body = {
+        sponsor_review_id: sponsorTask?.reviewId || null,
+        sponsor_action_index: sponsorTask?.actionIndex || 0,
+        execution_site: executionSite,
+        site_confirmed: siteConfirmed,
         building_id: building,
         location_id: inspectionLocation,
         mode,
@@ -378,6 +389,7 @@ function App() {
       selectScan(s);
       setPage("overview");
       setScanDialog(false);
+      setSponsorTask(null);
       setScans((old) => [s, ...old]);
     });
   }
@@ -1021,6 +1033,28 @@ function App() {
                   )}
                 </section>
               </div>
+              {scan?.sponsor_context && (
+                <section className="panel settings-card">
+                  <div className="settings-body">
+                    <h2>Evidence → plan → measurement</h2>
+                    <strong>{scan.sponsor_context.title}</strong>
+                    <p>
+                      {scan.sponsor_context.property_name} ·{" "}
+                      {scan.sponsor_context.target_location}
+                    </p>
+                    <p>{scan.sponsor_context.reason}</p>
+                    <p>
+                      Evidence: {scan.sponsor_context.sources.join(" + ")} ·
+                      Plan: {scan.sponsor_context.plan_id}
+                    </p>
+                    <p>
+                      {scan.sponsor_context.execution_site === "local_fixture"
+                        ? "LOCAL FIXTURE DEMONSTRATION — these measurements do not describe the remote sponsor property."
+                        : "Property-site inspection — location confirmed by operator."}
+                    </p>
+                  </div>
+                </section>
+              )}
               {scan?.atlas_status && (
                 <p role="status" className="info-note">
                   {scan.atlas_status === "saved"
@@ -1098,8 +1132,8 @@ function App() {
               )}
               <div className="workspace-footer">
                 <span>
-                  <ShieldCheck size={13} /> Evidence stays local. Google
-                  receives images only when AI is enabled.
+                  <ShieldCheck size={13} /> Evidence is saved locally and to
+                  Atlas. Google receives images only when AI is enabled.
                 </span>
                 <span>SCOUT RADAR / MVP 1.0</span>
               </div>
@@ -1121,7 +1155,29 @@ function App() {
             />
           )}
           {page === "sponsor" && (
-            <Sponsor settings={settings!} onChange={setSettings} />
+            <Sponsor
+              settings={settings!}
+              onChange={setSettings}
+              onCreateInspection={(reviewId, actionIndex, title) => {
+                setSponsorTask({ reviewId, actionIndex, title });
+                setInspectionLocation(
+                  `plan-${reviewId.slice(0, 8)}-${actionIndex + 1}`,
+                );
+                setExecutionSite("local_fixture");
+                setSiteConfirmed(false);
+                setMode("demo");
+                setUseAI(false);
+                setScanDialog(true);
+              }}
+              onViewInspection={(id) => {
+                api<Scan>("/scans/" + id)
+                  .then((s) => {
+                    selectScan(s);
+                    navigate("overview");
+                  })
+                  .catch((e) => setError(e.message));
+              }}
+            />
           )}
           {page === "history" && (
             <InspectionHistory
@@ -1201,7 +1257,10 @@ function App() {
               <button
                 className="icon-button"
                 aria-label="Close new inspection"
-                onClick={() => setScanDialog(false)}
+                onClick={() => {
+                  setScanDialog(false);
+                  setSponsorTask(null);
+                }}
               >
                 <X size={20} />
               </button>
@@ -1216,6 +1275,46 @@ function App() {
                 start();
               }}
             >
+              {sponsorTask && (
+                <section className="info-note">
+                  <div>
+                    <strong>From sponsor plan: {sponsorTask.title}</strong>
+                    <p>
+                      Remote evidence guides this check. Room dimensions are not
+                      doorway clearances; choose a verified measurement baseline
+                      below.
+                    </p>
+                    <Field label="Where is the rig?">
+                      <select
+                        value={executionSite}
+                        onChange={(e) => {
+                          setExecutionSite(e.target.value);
+                          setSiteConfirmed(false);
+                        }}
+                      >
+                        <option value="local_fixture">
+                          Local test fixture — demonstration only
+                        </option>
+                        <option value="property_site">
+                          At the selected sponsor property
+                        </option>
+                      </select>
+                    </Field>
+                    {executionSite === "property_site" && (
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={siteConfirmed}
+                          required
+                          onChange={(e) => setSiteConfirmed(e.target.checked)}
+                        />
+                        I confirm the rig is physically at the selected property
+                        and action location. Hardware mode is required.
+                      </label>
+                    )}
+                  </div>
+                </section>
+              )}
               <Field label="Digital twin">
                 <select
                   autoFocus

@@ -2,9 +2,10 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi, it, expect, afterEach } from "vitest";
 import InspectionHistory from "./InspectionHistory";
-import { api, post } from "./api";
+import { api, post, patch } from "./api";
 vi.mock("./api", () => ({
   api: vi.fn(),
+  patch: vi.fn().mockResolvedValue({}),
   post: vi.fn().mockResolvedValue({ imported: 0, failed: 0 }),
 }));
 afterEach(() => {
@@ -144,4 +145,30 @@ it("loads Analytics after syncing old scans and renders category counts", async 
   expect(
     screen.getByRole("img", { name: "Inspection activity (UTC)" }).textContent,
   ).toContain("35 inspections");
+});
+
+it("records explicit human review notes without altering measured values", async () => {
+  vi.mocked(api).mockImplementation(
+    async (path) => (path === "/scans" ? [] : [record]) as never,
+  );
+  render(<InspectionHistory />);
+  await userEvent.click(await screen.findByText("Expand inspection details"));
+  await userEvent.click(
+    screen.getByText("Human review / record a verified resolution"),
+  );
+  await userEvent.selectOptions(
+    screen.getByLabelText("Review box"),
+    "resolved",
+  );
+  await userEvent.type(
+    screen.getByLabelText("Review evidence and notes"),
+    "Physical check completed.",
+  );
+  await userEvent.click(screen.getByText("Save human review"));
+  await waitFor(() =>
+    expect(patch).toHaveBeenCalledWith("/inspections/one/review", {
+      findings: [{ ...record.findings[0], status: "resolved" }],
+      notes: "Physical check completed.",
+    }),
+  );
 });

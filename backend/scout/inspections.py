@@ -15,7 +15,7 @@ from pymongo.errors import PyMongoError
 
 from . import db
 from .config import mongodb_settings
-from .models import InspectionCreate
+from .models import InspectionCreate, InspectionReview
 
 
 class InspectionUnavailable(RuntimeError):
@@ -342,6 +342,7 @@ def compare(before, after):
         for k in sorted(oldf.keys() | newf.keys())
     ]
     return {
+        "sponsor_context": after.get("sponsor_context"),
         "building_id": after["building_id"],
         "location_id": after["location_id"],
         "before_id": before["id"],
@@ -454,6 +455,35 @@ async def compare_inspections(
     return compare(records[1], records[0])
 
 
+@router.patch("/{id}/review")
+async def review_inspection(id: str, payload: InspectionReview):
+    record = await store.get(id)
+    if {f.key for f in payload.findings} != {f["key"] for f in record["findings"]}:
+        raise HTTPException(
+            422,
+            "Review must retain the original finding keys; measurements cannot be changed.",
+        )
+    async with store.operation() as c:
+        await c.update_one(
+            {"_id": ObjectId(id)},
+            {
+                "$set": {
+                    "findings": [f.model_dump() for f in payload.findings],
+                    "review_status": "reviewed",
+                },
+                "$push": {
+                    "review_history": {
+                        "timestamp": db.now(),
+                        "notes": payload.notes,
+                        "before": record["findings"],
+                        "after": [f.model_dump() for f in payload.findings],
+                    }
+                },
+            },
+        )
+    return await store.get(id)
+
+
 @router.get("/{id}")
 async def get_inspection(id: str):
     return await store.get(id)
@@ -485,6 +515,7 @@ async def save_completed_scan(doc):
     checks = result.get("checks", [])
     payload = InspectionCreate(
         scan_id=doc["id"],
+        sponsor_context=doc.get("sponsor_context"),
         source_mode=doc["request"]["mode"],
         building_id=doc["request"]["building_id"],
         location_id=doc["request"].get("location_id") or doc["request"]["profile"],

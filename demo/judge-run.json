@@ -1,0 +1,153 @@
+{
+  "review_id": "9894d64d-79c2-4dd0-8bc0-2c925acd7d52",
+  "location_id": "judge-fixture-9894d64d",
+  "execution_site": "local_fixture",
+  "results": [
+    {
+      "scan_id": "32f5be6a-0e8b-49ca-abdd-d6d6d35cadb7",
+      "atlas_id": "08d84a5398dcf785d2e3ea29",
+      "scenario": "obstructed",
+      "verdict": "FAIL",
+      "width_in": 29.102232260274146
+    },
+    {
+      "scan_id": "82a8b0a8-e521-4380-bfa7-07eb3df511b0",
+      "atlas_id": "936df96ab12ff62d713e6a8b",
+      "scenario": "clear",
+      "verdict": "PASS",
+      "width_in": 36.80234327398377
+    }
+  ],
+  "comparison": {
+    "sponsor_context": {
+      "review_id": "9894d64d-79c2-4dd0-8bc0-2c925acd7d52",
+      "plan_id": "PLAN-9894D64D",
+      "action_index": 0,
+      "property_id": "commercial-10027998",
+      "property_name": "Emerald",
+      "model_id": "vCZStYcR5ry",
+      "target_location": "Street-facing perimeter and corner intersection",
+      "title": "Verify Public Right-of-Way and Curb Ramps",
+      "reason": "Vexcel imagery shows sidewalk frontages; need to confirm curb ramp compliance and path continuity from public transit/parking to the site.",
+      "next_action": "Perform physical measurement of curb ramp slopes and detectability of warning surfaces.",
+      "sources": [
+        "vexcel"
+      ],
+      "execution_site": "local_fixture"
+    },
+    "building_id": "princeton-demo",
+    "location_id": "judge-fixture-9894d64d",
+    "before_id": "08d84a5398dcf785d2e3ea29",
+    "after_id": "936df96ab12ff62d713e6a8b",
+    "before_timestamp": "2026-11-15T02:30:06.146000+00:00",
+    "after_timestamp": "2026-11-15T02:30:09.520000+00:00",
+    "measurement_changes": [
+      {
+        "key": "handle",
+        "before": {
+          "key": "handle",
+          "value": null,
+          "unit": "in",
+          "uncertainty": 0.1
+        },
+        "after": {
+          "key": "handle",
+          "value": null,
+          "unit": "in",
+          "uncertainty": 0.1
+        },
+        "delta": null,
+        "combined_uncertainty": null,
+        "status": "inconclusive"
+      },
+      {
+        "key": "threshold",
+        "before": {
+          "key": "threshold",
+          "value": null,
+          "unit": "in",
+          "uncertainty": 0.04
+        },
+        "after": {
+          "key": "threshold",
+          "value": null,
+          "unit": "in",
+          "uncertainty": 0.04
+        },
+        "delta": null,
+        "combined_uncertainty": null,
+        "status": "inconclusive"
+      },
+      {
+        "key": "width",
+        "before": {
+          "key": "width",
+          "value": 29.102232260274146,
+          "unit": "in",
+          "uncertainty": 0.47244094488188976
+        },
+        "after": {
+          "key": "width",
+          "value": 36.80234327398377,
+          "unit": "in",
+          "uncertainty": 0.47244094488188976
+        },
+        "delta": 7.700111013709627,
+        "combined_uncertainty": 0.9448818897637795,
+        "status": "changed"
+      }
+    ],
+    "finding_changes": [
+      {
+        "key": "handle",
+        "before": {
+          "category": "handle",
+          "key": "handle",
+          "status": "inconclusive",
+          "detail": "Handle height: NOT_MEASURED"
+        },
+        "after": {
+          "category": "handle",
+          "key": "handle",
+          "status": "inconclusive",
+          "detail": "Handle height: NOT_MEASURED"
+        },
+        "change": "unchanged"
+      },
+      {
+        "key": "threshold",
+        "before": {
+          "category": "threshold",
+          "key": "threshold",
+          "status": "inconclusive",
+          "detail": "Threshold height: NOT_MEASURED"
+        },
+        "after": {
+          "category": "threshold",
+          "key": "threshold",
+          "status": "inconclusive",
+          "detail": "Threshold height: NOT_MEASURED"
+        },
+        "change": "unchanged"
+      },
+      {
+        "key": "width",
+        "before": {
+          "category": "width",
+          "key": "width",
+          "status": "observed",
+          "detail": "Clear width: FAIL"
+        },
+        "after": {
+          "category": "width",
+          "key": "width",
+          "status": "passed",
+          "detail": "Clear width: PASS"
+        },
+        "change": "status_changed"
+      }
+    ],
+    "review_status": "recheck",
+    "scope": "Measurement comparison only. Inconclusive means uncertainty overlaps, readings are missing, or units differ. Absent findings are not automatically resolved. No certified ADA compliance determination."
+  }
+}

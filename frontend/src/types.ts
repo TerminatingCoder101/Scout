@@ -77,7 +77,22 @@ export interface WorkOrder {
     rule: string;
   }[];
 }
+export interface SponsorContext {
+  review_id: string;
+  plan_id: string;
+  property_id: string;
+  property_name: string;
+  model_id: string;
+  action_index: number;
+  target_location: string;
+  title: string;
+  reason: string;
+  next_action: string;
+  sources: string[];
+  execution_site: "local_fixture" | "property_site";
+}
 export interface Scan {
+  sponsor_context?: SponsorContext | null;
   atlas_status?: "saving" | "saved" | "failed";
   atlas_error?: string;
   atlas_inspection_id?: string;

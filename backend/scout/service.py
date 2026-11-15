@@ -1,7 +1,7 @@
 import asyncio
 import math
 import uuid
-from . import db, rules, vision, inspections
+from . import db, rules, vision, inspections, sponsor
 from .config import config, DATA
 from .hardware import SerialDevice, Simulator, capture_camera, DeviceError
 from .models import ScanRequest
@@ -290,6 +290,7 @@ class ScanManager:
             twin = db.get_twin(request.building_id)
             if not twin:
                 raise KeyError("Digital twin not found.")
+            sponsor_context = sponsor.inspection_context(request)
             settings = config.public()
             if request.use_ai and not settings["gemini_api_key_configured"]:
                 raise ValueError("Add a Gemini API key in Settings before enabling AI.")
@@ -304,6 +305,7 @@ class ScanManager:
                 settings_snapshot=settings,
                 points=[],
                 images=[],
+                sponsor_context=sponsor_context,
                 agent_provider="deepagents" if request.use_ai else "deterministic",
             )
             db.save_scan(doc)
@@ -321,6 +323,17 @@ class ScanManager:
         try:
             doc["status"] = "running"
             db.save_scan(doc)
+            if doc.get("sponsor_context"):
+                await ctx.emit(
+                    "stage",
+                    {
+                        "stage": "site_verification",
+                        "message": "Verifying plan action: "
+                        + doc["sponsor_context"]["title"]
+                        + " · "
+                        + doc["sponsor_context"]["execution_site"],
+                    },
+                )
             if ctx.request.use_ai:
                 from .agent import run_deep_agent
 

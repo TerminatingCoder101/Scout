@@ -58,6 +58,7 @@ beforeEach(() => {
         result = { items: [property], total: 1 };
       else if (path === "/api/sponsor/reviews")
         result = options.method === "POST" ? review : [];
+      else if (path.endsWith("/inspections")) result = [];
       else if (path === "/api/settings") result = settings;
       else if (path.endsWith("/plan"))
         result = {
@@ -67,7 +68,15 @@ beforeEach(() => {
             id: "PLAN-TEST",
             summary: "Inspect the route.",
             scope: "Remote review",
-            actions: [],
+            actions: [
+              {
+                title: "Inspect entrance",
+                location: "East door",
+                reason: "Joined property and interior evidence",
+                next_action: "Measure clearance",
+                sources: ["costar", "matterport"],
+              },
+            ],
             limitations: ["Verify on site."],
           },
         };
@@ -95,7 +104,14 @@ it("saves only newly entered sponsor keys and clears secret inputs", async () =>
 
 it("loads linked layers and requires location confirmation before planning", async () => {
   const user = userEvent.setup();
-  render(<Sponsor settings={settings} onChange={vi.fn()} />);
+  const createInspection = vi.fn();
+  render(
+    <Sponsor
+      settings={settings}
+      onChange={vi.fn()}
+      onCreateInspection={createInspection}
+    />,
+  );
   await user.click(
     await screen.findByRole("button", { name: /Test property.*1 Test St/ }),
   );
@@ -123,4 +139,10 @@ it("loads linked layers and requires location confirmation before planning", asy
     ).toBe(true),
   );
   expect(await screen.findByText("Recommended inspection plan")).toBeTruthy();
+  await user.click(screen.getByText("Create site inspection from this plan"));
+  expect(createInspection).toHaveBeenCalledWith(
+    "review123",
+    0,
+    "Inspect entrance",
+  );
 });

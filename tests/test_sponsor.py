@@ -1,4 +1,3 @@
-import asyncio
 import io
 import json
 import time
@@ -231,3 +230,56 @@ async def test_planner_publishes_only_after_two_layers_read(
     assert doc["plan"]["status"] == "requires_site_verification"
     assert "verdict" not in doc["plan"]
     assert doc["plan"]["provenance"]["agent_read_layers"] == ["costar", "matterport"]
+
+
+def test_plan_to_inspection_context_and_site_guard(prepared):
+    from scout.models import ScanRequest
+
+    doc = dict(
+        id="linked-plan",
+        status="completed",
+        location_confirmed=True,
+        property=property_doc_for_link(),
+        model_id="model123",
+        layers=["costar", "matterport"],
+        plan=dict(
+            id="PLAN-LINK",
+            actions=[
+                dict(
+                    title="Inspect entrance",
+                    location="East entrance",
+                    reason="Joined context and interior evidence prioritize this entrance.",
+                    next_action="Measure opening",
+                    sources=["costar", "matterport"],
+                )
+            ],
+        ),
+    )
+    sponsor.put_review(doc)
+    req = ScanRequest(sponsor_review_id=doc["id"])
+    context = sponsor.inspection_context(req)
+    assert context["property_id"] == "commercial-1"
+    assert context["sources"] == ["costar", "matterport"]
+    assert context["execution_site"] == "local_fixture"
+    with pytest.raises(ValueError, match="hardware"):
+        sponsor.inspection_context(
+            req.model_copy(
+                update={"execution_site": "property_site", "site_confirmed": True}
+            )
+        )
+    context = sponsor.inspection_context(
+        req.model_copy(
+            update={
+                "execution_site": "property_site",
+                "mode": "hardware",
+                "site_confirmed": True,
+            }
+        )
+    )
+    assert context["execution_site"] == "property_site"
+    with pytest.raises(ValueError, match="does not exist"):
+        sponsor.inspection_context(req.model_copy(update={"sponsor_action_index": 7}))
+
+
+def property_doc_for_link():
+    return dict(id="commercial-1", name="Synthetic property", address="Fixture")

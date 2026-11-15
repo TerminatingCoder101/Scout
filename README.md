@@ -272,3 +272,30 @@ credentials and imported properties are reused. See
 Inspection History combines local and Atlas inspection rows. Expand a row to see its radar plot, measured values and uncertainty, findings, and available photos. The activity graph counts loaded records for the current filters/page; Analytics retains property-wide aggregation. Use Open full inspection for the original workspace and timeline.
 
 Analytics now imports all previous completed local scans through authenticated `POST /api/inspections/sync-local` before loading its aggregates. This reads the full SQLite history, bypassing the recent-scans 100-record UI limit. Repeated imports are duplicate-safe by scan ID. Invalid legacy records are reported as skipped/failed; failed and cancelled scans are not counted as completed inspections. The import preserves original timestamps and demo/hardware provenance.
+
+### Evidence-linked site inspections
+
+In **Property intelligence**, publish an agent inspection plan from at least two
+retrieved sponsor layers after checking the property/model match. Each action now
+has **Create site inspection from this plan**. It opens the existing inspection
+form with a stable location ID and the plan action attached. Choose a measured
+reference baseline and inspection profile; remote room dimensions are not doorway
+clearance measurements.
+
+The default is **Local test fixture — demonstration only**. Choosing the actual
+property site requires hardware mode and explicit operator confirmation of the
+rig's location. The server resolves property, model, plan, target and evidence
+sources from its saved plan, rather than trusting client-supplied provenance.
+These links persist in the scan, Atlas record, comparison, and History details.
+The property plan displays its linked inspections and their save/result status.
+
+History includes **Human review / record a verified resolution**. Reviewers supply
+notes and explicitly update finding statuses; this endpoint preserves measured
+values and records the previous finding state in a review audit trail. Analytics
+continues to distinguish passing checks from reviewed fixes. No demo is evidence
+of repair at a remote sponsor property.
+
+See [the judge walkthrough](docs/JUDGE_DEMO.md) for the full demonstration and
+local recording command. Live sponsor access depends on provider credentials and
+the event's data availability. Existing saved evidence/plans can be transparently
+shown as prior runs when providers are unavailable.

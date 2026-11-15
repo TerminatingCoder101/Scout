@@ -295,3 +295,42 @@ def test_sync_imports_all_local_history_and_skips_existing(client, monkeypatch):
     assert result["imported"] == 0
     assert result["already_saved_or_skipped"] == 105
     save.assert_not_awaited()
+
+
+def test_human_review_keeps_measurements_and_original_keys(atlas):
+    client, collection = atlas
+    record = client.post("/api/inspections", json=payload()).json()
+
+    async def update(query, changes):
+        for doc in collection.docs:
+            if doc["_id"] == query["_id"]:
+                doc.update(changes["$set"])
+                doc.setdefault("review_history", []).append(
+                    changes["$push"]["review_history"]
+                )
+
+    collection.update_one = update
+    response = client.patch(
+        f"/api/inspections/{record['id']}/review",
+        json={
+            "findings": [
+                dict(
+                    key="box",
+                    status="resolved",
+                    detail="Removed and physically rechecked",
+                )
+            ],
+            "notes": "Operator rechecked opening.",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["measurements"] == record["measurements"]
+    assert response.json()["review_status"] == "reviewed"
+    assert response.json()["review_history"][0]["before"][0]["status"] == "observed"
+    assert (
+        client.patch(
+            f"/api/inspections/{record['id']}/review",
+            json={"findings": [], "notes": "Do not silently discard findings"},
+        ).status_code
+        == 422
+    )

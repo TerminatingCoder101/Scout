@@ -192,9 +192,17 @@ function Viewer({ reviewId }: { reviewId: string }) {
 export default function Sponsor({
   settings,
   onChange,
+  onCreateInspection,
+  onViewInspection,
 }: {
   settings: Settings;
   onChange: (s: Settings) => void;
+  onCreateInspection?: (
+    reviewId: string,
+    actionIndex: number,
+    title: string,
+  ) => void;
+  onViewInspection?: (scanId: string) => void;
 }) {
   const [keys, setKeys] = useState(emptyKeys),
     [busy, setBusy] = useState(false),
@@ -210,6 +218,35 @@ export default function Sponsor({
     [history, setHistory] = useState<Review[]>([]),
     [confirmed, setConfirmed] = useState(false),
     [showViewer, setShowViewer] = useState(false);
+  const [linked, setLinked] = useState<
+    {
+      id: string;
+      status: string;
+      mode: string;
+      atlas_status?: string;
+      verdict?: string;
+      context: { title: string; execution_site: string };
+    }[]
+  >([]);
+  useEffect(() => {
+    let live = true;
+    if (!review?.id) {
+      setLinked([]);
+      return;
+    }
+    const load = () =>
+      api<typeof linked>(`/sponsor/reviews/${review.id}/inspections`)
+        .then((d) => {
+          if (live) setLinked(d);
+        })
+        .catch(() => {});
+    void load();
+    const timer = setInterval(load, 5000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [review?.id]);
   const active = review?.status === "loading" || review?.status === "planning";
   async function task(fn: () => Promise<void>) {
     setBusy(true);
@@ -680,6 +717,46 @@ export default function Sponsor({
                     <strong>Next action:</strong> {a.next_action}
                   </p>
                   <small>Evidence: {a.sources.join(" + ")}</small>
+                  {onCreateInspection && (
+                    <button
+                      className="secondary compact"
+                      onClick={() => onCreateInspection(review.id, i, a.title)}
+                    >
+                      Create site inspection from this plan
+                    </button>
+                  )}
+                </article>
+              ))}
+              <h4>Site verification progress</h4>
+              <p className="muted">
+                Remote evidence prioritizes checks. Local fixture demonstrations
+                do not verify conditions at the sponsor property.
+              </p>
+              {!linked.length && (
+                <p>
+                  No linked site inspections yet. Select a plan action above to
+                  begin.
+                </p>
+              )}
+              {linked.map((s) => (
+                <article key={s.id}>
+                  <strong>{s.context.title}</strong>
+                  <p>
+                    {s.context.execution_site === "local_fixture"
+                      ? "LOCAL FIXTURE · not the sponsor property"
+                      : "PROPERTY SITE · operator confirmed"}{" "}
+                    · {s.mode} · {s.status} ·{" "}
+                    {s.verdict || "Awaiting measurement"} · Atlas:{" "}
+                    {s.atlas_status || "pending"}
+                  </p>
+                  {onViewInspection && (
+                    <button
+                      className="text-button"
+                      onClick={() => onViewInspection(s.id)}
+                    >
+                      Open linked inspection
+                    </button>
+                  )}
                 </article>
               ))}
               <h4>Limitations</h4>
